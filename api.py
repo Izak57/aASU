@@ -15,7 +15,7 @@ class User(uasu.APIModel):
     birth: date
     token: str = Field(default_factory=lambda: token_hex(32))
 
-    def serialize(self, privacy: str | None = None):
+    def apiserialize(self, privacy: str | None = None):
         return {
             "id": self.id,
             "name": self.name,
