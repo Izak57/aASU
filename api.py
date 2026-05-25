@@ -25,7 +25,7 @@ class User(uasu.APIModel):
 
 
 
-app = FastAPI()
+app = FastAPI(default_response_class=uasu.FastAPICompatibleJSONResponse)
 db = uasu.Database("mongodb://localhost:27017", "uasu_test")
 
 UserTable = db.collection("users", User)
