@@ -32,18 +32,22 @@ UserTable = db.collection("users", User)
 
 
 
-us = UserTable.find({}).limit(1).all()
-print(us)
 
 
 
-
-"""@app.get("/hello")
+@app.get("/hello")
 def hello():
     return {"Hello": "World"}
 
 
-@app.post("/user/{id}/new")
+@app.get("/users")
+def get_users():
+    users = UserTable.find().all()
+    return users
+    return [uasu.apiserialize(u) for u in users]
+
+
+@app.post("/users/{id}/new")
 def create_user(id: str,
                 name: Annotated[str, Body()],
                 email: Annotated[str, Body()],
@@ -53,10 +57,9 @@ def create_user(id: str,
     return uasu.apiserialize(user)
 
 
-@app.get("/user/{id}")
+@app.get("/users/{id}")
 def get_user(id: str):
     user = UserTable.get(id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return uasu.apiserialize(user)
-"""

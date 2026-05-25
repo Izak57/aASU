@@ -22,6 +22,7 @@ class Database:
             self.client = MongoClient(uri)
 
         self.db = self.client[db_name]
+        self._collections: dict[str, Collection[Any]] = {}
 
 
     @overload
@@ -50,7 +51,16 @@ class Database:
                    model: Type[ColModelT] | None = None,
                    *,
                    primary_key: str = "id") -> "Collection[ColModelT]":
-        return Collection(name, self, model=model, primary_key=primary_key)
+        if name in self._collections:
+            return self._collections[name]
+
+        col = Collection(name, self, model=model, primary_key=primary_key)
+        self._collections[name] = col
+        return col
+    
+
+    def __getitem__(self, name: str) -> "Collection":
+        return self.collection(name)
 
 
 
@@ -84,11 +94,11 @@ class Collection(Generic[ColModelT]):
 
 
     def find(self,
-             filters: dict[str, Any],
+             filters: dict[str, Any] = {},
              *,
              limit: int | None = None,
              projection: dict[str, Any] | None = None) -> "Cursor[ColModelT]":
-        cursor = Cursor(self, filters, limit=limit, projection=projection)
+        cursor = Cursor(self, filters.copy(), limit=limit, projection=projection)
         return cursor
 
 
@@ -113,6 +123,7 @@ class Cursor(Generic[ColModelT]):
         self.filters = filters
         self.record_limit = limit
         self.projection = projection
+        self.skip_offset = 0
         self.current_cursor: PyMongoCursor | None = None
 
 
@@ -124,9 +135,14 @@ class Cursor(Generic[ColModelT]):
     def limit(self, limit: int) -> Self:
         self.record_limit = limit
         return self
+    
+
+    def skip(self, skip: int) -> Self:
+        self.skip_offset = skip
+        return self
 
 
-    def project(self, projection: dict[str, Any]) -> Self[ColModelT]:
+    def project(self, projection: dict[str, Any]) -> Self:
         self.projection = projection
         return self
 
@@ -139,20 +155,16 @@ class Cursor(Generic[ColModelT]):
         if self.record_limit is not None:
             cursor = cursor.limit(self.record_limit)
 
+        if self.skip_offset > 0:
+            cursor = cursor.skip(self.skip_offset)
+
         self.current_cursor = cursor
         return cursor
-    
+
 
     def first(self) -> ColModelT | None:
         obj = next(iter(self), None)
-        if obj is None:
-            return None
-
-        if self.collection.model is not None:
-            assert issubclass(self.collection.model, BaseModel)
-            return self.collection.model.model_validate(obj)
-        else:
-            return obj
+        return obj
 
 
     def all(self) -> list[ColModelT]:
@@ -172,9 +184,12 @@ class Cursor(Generic[ColModelT]):
 
         assert self.current_cursor is not None
         obj = next(self.current_cursor)
+        return self._deserialize(obj)
 
+
+    def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
         if self.collection.model is not None:
             assert issubclass(self.collection.model, BaseModel)
             return self.collection.model.model_validate(obj)
         else:
-            return obj
+            return obj # type: ignore
