@@ -5,6 +5,7 @@ from secrets import token_hex
 from fastapi import FastAPI, Body, HTTPException
 from pydantic import Field
 import uasu
+from rich import print
 
 
 
@@ -25,15 +26,19 @@ class User(uasu.APIModel):
 
 
 app = FastAPI()
+db = uasu.Database("mongodb://localhost:27017", "uasu_test")
 
-users: list[User] = [
-    User(id="izak",name="Izak",
-         email="izak@tuffapi.com", birth=date(2009, 8, 3))
-]
+UserTable = db.collection("users", User)
 
 
 
-@app.get("/hello")
+us = UserTable.find({}).limit(1).all()
+print(us)
+
+
+
+
+"""@app.get("/hello")
 def hello():
     return {"Hello": "World"}
 
@@ -44,13 +49,14 @@ def create_user(id: str,
                 email: Annotated[str, Body()],
                 birth: Annotated[date, Body()]):
     user = User(id=id, name=name, email=email, birth=birth)
-    users.append(user)
+    UserTable.insert(user)
     return uasu.apiserialize(user)
 
 
 @app.get("/user/{id}")
 def get_user(id: str):
-    user = next((u for u in users if u.id == id), None)
+    user = UserTable.get(id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return uasu.apiserialize(user)
+"""
