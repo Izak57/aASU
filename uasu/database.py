@@ -113,8 +113,15 @@ class Collection(Generic[ColModelT]):
 
 
     def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor[ColModelT]":
-        cursor = AggregateCursor(self, pipeline.copy())
-        return cursor
+        return AggregateCursor(self, pipeline.copy())
+
+
+    def deserialize(self, obj: dict[str, Any]) -> ColModelT:
+        if self.model is not None:
+            assert issubclass(self.model, BaseModel)
+            return self.model.model_validate(obj)
+        else:
+            return obj # type: ignore
 
 
 
@@ -194,11 +201,7 @@ class Cursor(Generic[ColModelT]):
 
 
     def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
-        if self.collection.model is not None:
-            assert issubclass(self.collection.model, BaseModel)
-            return self.collection.model.model_validate(obj)
-        else:
-            return obj # type: ignore
+        return self.collection.deserialize(obj)
 
 
 
@@ -244,8 +247,4 @@ class AggregateCursor(Generic[ColModelT]):
 
 
     def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
-        if self.collection.model is not None:
-            assert issubclass(self.collection.model, BaseModel)
-            return self.collection.model.model_validate(obj)
-        else:
-            return obj # type: ignore
+        return self.collection.deserialize(obj)
