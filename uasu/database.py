@@ -137,7 +137,6 @@ class Cursor(Generic[ColModelT]):
         self.record_limit = limit
         self.projection = projection
         self.skip_offset = 0
-        self.current_cursor: PyMongoCursor | None = None
 
 
     def filter(self, filters: dict[str, Any]) -> Self:
@@ -171,7 +170,6 @@ class Cursor(Generic[ColModelT]):
         if self.skip_offset > 0:
             cursor = cursor.skip(self.skip_offset)
 
-        self.current_cursor = cursor
         return cursor
 
 
@@ -185,17 +183,9 @@ class Cursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        self._build_cursor()
-        return self
-
-
-    def __next__(self) -> "ColModelT":
-        if self.current_cursor is None:
-            self._build_cursor()
-
-        assert self.current_cursor is not None
-        obj = next(self.current_cursor)
-        return self._deserialize(obj)
+        current_cursor = self._build_cursor()
+        for obj in current_cursor:
+            yield self._deserialize(obj)
 
 
     def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
@@ -210,13 +200,10 @@ class AggregateCursor(Generic[ColModelT]):
                  pipeline: list[dict[str, Any]]):
         self.collection = collection
         self.pipeline = pipeline
-        self.current_cursor: PyMongoCommandCursor | None = None
 
 
     def _build_cursor(self) -> PyMongoCommandCursor:
-        cursor = self.collection.collection.aggregate(self.pipeline)
-        self.current_cursor = cursor
-        return cursor
+        return self.collection.collection.aggregate(self.pipeline)
 
 
     def first(self) -> ColModelT | None:
@@ -229,17 +216,9 @@ class AggregateCursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        self._build_cursor()
-        return self
-
-
-    def __next__(self) -> "ColModelT":
-        if self.current_cursor is None:
-            self._build_cursor()
-
-        assert self.current_cursor is not None
-        obj = next(self.current_cursor)
-        return self._deserialize(obj)
+        current_cursor = self._build_cursor()
+        for obj in current_cursor:
+            yield self._deserialize(obj)
 
 
     def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
