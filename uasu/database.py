@@ -105,7 +105,7 @@ class Collection(Generic[ColModelT]):
 
     def find_one(self, filters: dict[str, Any]) -> "ColModelT | None":
         cursor = self.find(filters, limit=1)
-        return next(cursor, None)
+        return next(iter(cursor), None)
 
 
     def get(self, id: Any) -> "ColModelT | None":
