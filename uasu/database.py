@@ -113,7 +113,7 @@ class Collection(Generic[ColModelT]):
 
 
     def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor[ColModelT]":
-        return AggregateCursor(self, pipeline.copy())
+        return AggregateCursor(self, pipeline)
 
 
     def deserialize(self, obj: dict[str, Any]) -> ColModelT:
@@ -185,9 +185,7 @@ class Cursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        if self.current_cursor is None:
-            self._build_cursor()
-
+        self._build_cursor()
         return self
 
 
@@ -231,9 +229,7 @@ class AggregateCursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        if self.current_cursor is None:
-            self._build_cursor()
-
+        self._build_cursor()
         return self
 
 
