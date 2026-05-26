@@ -3,6 +3,7 @@ from typing import Any, Self, Type, TypeVar, Generic, overload
 from pydantic import BaseModel
 from pymongo import MongoClient
 from pymongo.cursor import Cursor as PyMongoCursor
+from pymongo.command_cursor import CommandCursor as PyMongoCommandCursor
 
 
 ColModelT = TypeVar("ColModelT")
@@ -111,6 +112,11 @@ class Collection(Generic[ColModelT]):
         return self.find_one({self.primary_key: id})
 
 
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor[ColModelT]":
+        cursor = AggregateCursor(self, pipeline.copy())
+        return cursor
+
+
 
 class Cursor(Generic[ColModelT]):
 
@@ -158,6 +164,56 @@ class Cursor(Generic[ColModelT]):
         if self.skip_offset > 0:
             cursor = cursor.skip(self.skip_offset)
 
+        self.current_cursor = cursor
+        return cursor
+
+
+    def first(self) -> ColModelT | None:
+        obj = next(iter(self), None)
+        return obj
+
+
+    def all(self) -> list[ColModelT]:
+        return list(iter(self))
+
+
+    def __iter__(self):
+        if self.current_cursor is None:
+            self._build_cursor()
+
+        return self
+
+
+    def __next__(self) -> "ColModelT":
+        if self.current_cursor is None:
+            self._build_cursor()
+
+        assert self.current_cursor is not None
+        obj = next(self.current_cursor)
+        return self._deserialize(obj)
+
+
+    def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
+        if self.collection.model is not None:
+            assert issubclass(self.collection.model, BaseModel)
+            return self.collection.model.model_validate(obj)
+        else:
+            return obj # type: ignore
+
+
+
+class AggregateCursor(Generic[ColModelT]):
+
+    def __init__(self,
+                 collection: Collection[ColModelT],
+                 pipeline: list[dict[str, Any]]):
+        self.collection = collection
+        self.pipeline = pipeline
+        self.current_cursor: PyMongoCommandCursor | None = None
+
+
+    def _build_cursor(self) -> PyMongoCommandCursor:
+        cursor = self.collection.collection.aggregate(self.pipeline)
         self.current_cursor = cursor
         return cursor
 
