@@ -174,8 +174,7 @@ class Cursor(Generic[ColModelT]):
 
 
     def first(self) -> ColModelT | None:
-        obj = next(iter(self), None)
-        return obj
+        return next(iter(self), None)
 
 
     def all(self) -> list[ColModelT]:
@@ -207,8 +206,7 @@ class AggregateCursor(Generic[ColModelT]):
 
 
     def first(self) -> ColModelT | None:
-        obj = next(iter(self), None)
-        return obj
+        return next(iter(self), None)
 
 
     def all(self) -> list[ColModelT]:
