@@ -1,5 +1,6 @@
 from datetime import date
 from secrets import token_hex
+from time import sleep
 
 from pydantic import Field
 import uasu
@@ -21,9 +22,9 @@ class User(uasu.APIModel):
         }
 
 
-d = uasu.CacheDatabase(Redis.from_url(""))
+d = uasu.CacheDatabase(Redis.from_url("redis://127.0.0.1:6379"))
 
-UserCache = d.cacher("users", User)
+UserCache = d.cacher("users", User, default_expiration=1)
 
 w = User(
     name="Will",
@@ -33,4 +34,6 @@ w = User(
 
 UserCache[w.id] = w
 
+print(UserCache[w.id])
+sleep(2.5)
 print(UserCache[w.id])

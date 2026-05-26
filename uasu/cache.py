@@ -1,4 +1,5 @@
 from typing import TypeVar, Generic, overload, cast
+from datetime import datetime
 
 from pydantic import BaseModel
 from fastapi import FastAPI, Request
@@ -70,7 +71,20 @@ class CacheController(Generic[CacheControllerModelT]):
     def set(self,
             key: str,
             value: CacheControllerModelT,
-            expires_in: int | None | str = "default") -> None:
+            expires_in: int | None | str = "default",
+            expires_at: datetime | int | None = None) -> None:
+        if expires_at:
+            expi = None
+
+            if isinstance(expires_at, datetime):
+                expires_at = int(expires_at.timestamp())
+
+        elif expires_in == "default":
+            expi = self.default_expiration
+        
+        else:
+            expi = expires_in
+
         expi = self.default_expiration if expires_in == "default" else expires_in
         expi = cast(int | None, expi)
 
@@ -83,12 +97,11 @@ class CacheController(Generic[CacheControllerModelT]):
         else:
             raise TypeError("value should either be a string, or a pydantic model instance")
 
-        self.cdb.rclient.set(f"{self.key}:{key}", valdata, expi)
+        self.cdb.rclient.set(f"{self.key}:{key}", valdata, ex=expi, exat=expires_at)
 
 
     def get(self, key: str) -> CacheControllerModelT | None:
-        realkey = f"{self.key}:{key}"
-        rawval = self.cdb.rclient.get(realkey)
+        rawval = self.cdb.rclient.get(f"{self.key}:{key}")
 
         if rawval is None:
             return None
@@ -99,3 +112,7 @@ class CacheController(Generic[CacheControllerModelT]):
             obj = rawval
 
         return obj # type: ignore
+
+
+    def ttl(self, key: str) -> int | None:
+        return self.cdb.rclient.ttl(f"{self.key}:{key}") # type: ignore
