@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import jwt
 from jwt import PyJWK
 from jwt.types import Options as JwtOptions
+from jwt.algorithms import AllowedPublicKeys
 
 from .exceptions import JwtDenied
 
@@ -18,7 +19,7 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 
 
 class JwtAuthConfig(BaseModel):
-    key: PyJWK
+    key: AllowedPublicKeys | PyJWK | str | bytes
     issuer: str | None = None
     audience: list[str] | None = None
     expires_in: int | None = None
