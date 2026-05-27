@@ -1,6 +1,7 @@
-# aASU
+# aASU (`uasu` import namespace)
 
-`aASU` is a small utility package for building API backends with:
+`aASU` is the repository/project name, and `uasu` is the Python import namespace.
+It is a small utility package for building API backends with:
 
 - Pydantic-based API serialization
 - MongoDB data access helpers
@@ -12,8 +13,18 @@
 
 ## Installation
 
+Install dependencies:
+
 ```bash
 pip install -r requirements.txt
+```
+
+Use it from source:
+
+```bash
+cd /path/to/aASU
+export PYTHONPATH="$PWD"
+python your_script.py
 ```
 
 Requirements:
@@ -126,7 +137,7 @@ print(users.find({"name": "Izak"}).limit(10).all())
 `Collection.aggregate()` returns `AggregateCursor` and supports:
 
 - Iteration over pipeline results
-- `.add_line({...}, {...})` to append pipeline stages
+- `.add_line({...}, {...})` to append pipeline stages (this is the library’s current method name)
 
 ### Example
 
@@ -212,11 +223,13 @@ In `uasu.auth`:
 
 - `JwtAuthConfig` stores JWT settings.
 - `JwtAuthenticator.generate(...)` creates a JWT payload from a Pydantic model.
-- `JwtAuthenticator.load(...)` decodes token data back into your auth data model.
+- `JwtAuthenticator.load(...)` decodes token data and returns a new authenticator object; the parsed payload is available at `.data`.
 
 ### Example
 
 ```python
+import json
+import os
 from pydantic import BaseModel
 from uasu.auth import JwtAuthConfig, JwtAuthenticator
 from jwt import PyJWK
@@ -225,15 +238,24 @@ class AuthData(BaseModel):
     user_id: str
     role: str
 
+# `model=AuthData` is passed to `__init_subclass__` to bind the payload model.
 class AppAuth(JwtAuthenticator[AuthData], model=AuthData):
     pass
 
-jwk = PyJWK.from_json('{"kty":"oct","k":"c2VjcmV0","alg":"HS256"}')
+jwk_json = json.dumps({
+    "kty": "oct",
+    "k": os.environ["JWT_SECRET_B64"],
+    "alg": "HS256",
+})
+jwk = PyJWK.from_json(jwk_json)
 config = JwtAuthConfig(key=jwk, issuer="my-app")
 
 token = AppAuth.generate(AuthData(user_id="u1", role="admin"), config)
 auth = AppAuth.load(token, config)
 print(auth.data)
+
+# Optional decode options:
+# auth = AppAuth.load(token, config, opts={"verify_exp": True})
 ```
 
 ---
@@ -267,5 +289,6 @@ uvicorn --host 0.0.0.0 --port 8080 --reload api:app
 ## Notes
 
 - Redis and MongoDB must be reachable from your runtime.
-- `JwtAuthenticator` currently decodes tokens with optional PyJWT options and issuer checks.
+- `AggregateCursor.add_line(...)` is the current API method name for appending aggregation stages.
+- `JwtAuthenticator.load(...)` passes `opts` to `jwt.decode(...)`; use these options to enforce checks like expiration validation as needed.
 - `APIModel.apiserialize()` is the recommended place to hide private fields from API output.
