@@ -2,6 +2,9 @@ from pydantic import BaseModel
 from fastapi.encoders import jsonable_encoder
 
 
+__all__ = ["APIModel", "apiserialize"]
+
+
 
 class APIModel(BaseModel):
 

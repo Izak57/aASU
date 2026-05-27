@@ -1,6 +1,0 @@
-pydantic
-fastapi
-uvicorn
-pymongo
-redis
-pyjwt

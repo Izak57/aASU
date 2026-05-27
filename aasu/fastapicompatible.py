@@ -6,6 +6,9 @@ from fastapi.encoders import jsonable_encoder
 from .objects import APIModel, apiserialize
 
 
+__all__ = ["FastAPICompatibleJSONResponse"]
+
+
 
 class FastAPICompatibleJSONResponse(JSONResponse):
 

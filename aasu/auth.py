@@ -7,6 +7,11 @@ import jwt
 from jwt import PyJWK
 from jwt.types import Options as JwtOptions
 
+from .exceptions import JwtDenied
+
+
+__all__ = ["JwtAuthConfig", "JwtAuthenticator"]
+
 
 AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 
@@ -30,6 +35,16 @@ class JwtAuthenticator(Generic[AuthDataT]):
         cls._auth_data_model = model
 
 
+    @staticmethod
+    def verify_jwt(token: str) -> None:
+        ...
+
+
+    @staticmethod
+    def verify_data(data: dict[str, Any]) -> None:
+        ...
+
+
     @classmethod
     def generate(cls,
                  obj: AuthDataT,
@@ -50,15 +65,22 @@ class JwtAuthenticator(Generic[AuthDataT]):
              token: str,
              config: JwtAuthConfig,
              opts: JwtOptions | None = None) -> Self:
-        # TODO: call .verify_jwt(token)
-        data = jwt.decode(
-            token,
-            config.key,
-            options=opts,
-            issuer=config.issuer
-        )
+        try:
+            cls.verify_jwt(token)
+            data = jwt.decode(
+                token,
+                config.key,
+                options=opts,
+                issuer=config.issuer
+            )
+        except jwt.PyJWTError as e:
+            raise JwtDenied("Failed to verify JWT") from e
 
-        # TODO: call .verify_data(data)
-        authdata = cls._auth_data_model.model_validate(data, extra="ignore")
+        try:
+            cls.verify_data(data)
+            authdata = cls._auth_data_model.model_validate(data, extra="ignore")
+        except Exception as e:
+            raise JwtDenied("The data from the given JWT is invalid") from e
+
         authenti = cls(authdata)
         return authenti
