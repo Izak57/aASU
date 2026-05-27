@@ -69,7 +69,7 @@ import uasu
 from pydantic import Field
 
 class User(uasu.APIModel):
-    id: str = Field(default_factory=lambda: token_hex(4))
+    id: str = Field(default_factory=lambda: token_hex(16))
     name: str
     email: str
     birth: date
