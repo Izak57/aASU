@@ -3,6 +3,7 @@ from typing import Any, Self, Type, TypeVar, Generic, overload
 from pydantic import BaseModel
 from pymongo import MongoClient
 from pymongo.cursor import Cursor as PyMongoCursor
+from pymongo.command_cursor import CommandCursor as PyMongoCommandCursor
 
 
 ColModelT = TypeVar("ColModelT")
@@ -102,6 +103,11 @@ class Collection(Generic[ColModelT]):
         return cursor
 
 
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> AggregateCursor:
+        cursor = AggregateCursor(self, pipeline)
+        return cursor
+
+
     def find_one(self, filters: dict[str, Any]) -> "ColModelT | None":
         cursor = self.find(filters, limit=1)
         return next(cursor, None)
@@ -193,3 +199,41 @@ class Cursor(Generic[ColModelT]):
             return self.collection.model.model_validate(obj)
         else:
             return obj # type: ignore
+
+
+
+class AggregateCursor:
+
+    def __init__(self,
+                 collection: Collection[ColModelT],
+                 pipeline: list[dict[str, Any]]) -> None:
+        self.collection = collection
+        self.pipeline = pipeline
+        self.current_cursor: PyMongoCommandCursor | None = None
+
+
+    def __iter__(self):
+        if self.current_cursor is None:
+            self._build_cursor()
+
+        return self
+
+
+    def __next__(self):
+        if self.current_cursor is None:
+            self._build_cursor()
+
+        assert self.current_cursor is not None
+        obj = next(self.current_cursor)
+        return obj
+
+
+    def add_line(self, *pipeline: dict[str, Any]) -> Self:
+        self.pipeline.extend(pipeline)
+        return self
+
+
+    def _build_cursor(self) -> PyMongoCommandCursor:
+        cursor = self.collection.collection.aggregate(self.pipeline)
+        self.current_cursor = cursor
+        return cursor

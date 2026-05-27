@@ -24,7 +24,7 @@ class User(uasu.APIModel):
 
 d = uasu.CacheDatabase(Redis.from_url("redis://127.0.0.1:6379"))
 
-UserCache = d.cacher("users", User, default_expiration=1)
+UserCache = d.cacher("users", User, default_expiration=3)
 
 w = User(
     name="Will",
@@ -33,7 +33,7 @@ w = User(
 )
 
 UserCache[w.id] = w
-
 print(UserCache[w.id])
-sleep(2.5)
+sleep(0.5)
+print(UserCache.ttl(w.id))
 print(UserCache[w.id])
