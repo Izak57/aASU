@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, overload, cast
+from typing import TypeVar, Generic, Any, overload, cast
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -68,16 +68,46 @@ class CacheController(Generic[CacheControllerModelT]):
         self.set(key, value)
 
 
+    def _deserialize(self, rawval: str | None) -> Any:
+        if rawval is None:
+            return None
+
+        if self.model:
+            obj = self.model.model_validate_json(rawval) # type: ignore
+        else:
+            obj = rawval
+
+        return obj # type: ignore
+
+
+    def _serialize_value(self, value: Any) -> str:
+        if isinstance(value, BaseModel):
+            valdata = value.model_dump_json()
+
+        elif isinstance(value, str):
+            valdata = value
+
+        else:
+            raise TypeError("value should either be a string, or a pydantic model instance")
+        
+        return valdata
+
+
     def set(self,
             key: str,
             value: CacheControllerModelT,
             expires_in: int | None | str = "default",
-            expires_at: datetime | int | None = None) -> None:
+            *,
+            expires_at: datetime | int | None = None,
+            keep_ttl: bool = False) -> None:
         if expires_at:
             expi = None
 
             if isinstance(expires_at, datetime):
                 expires_at = int(expires_at.timestamp())
+
+        elif keep_ttl:
+            expi = None
 
         elif expires_in == "default":
             expi = self.default_expiration
@@ -88,30 +118,45 @@ class CacheController(Generic[CacheControllerModelT]):
         expi = self.default_expiration if expires_in == "default" else expires_in
         expi = cast(int | None, expi)
 
-        if isinstance(value, BaseModel):
-            valdata = value.model_dump_json()
+        valdata = self._serialize_value(value)
 
-        elif isinstance(value, str):
-            valdata = value
-
-        else:
-            raise TypeError("value should either be a string, or a pydantic model instance")
-
-        self.cdb.rclient.set(f"{self.key}:{key}", valdata, ex=expi, exat=expires_at)
+        self.cdb.rclient.set(
+            f"{self.key}:{key}", valdata,
+            ex=expi, exat=expires_at, keepttl=keep_ttl
+        )
 
 
     def get(self, key: str) -> CacheControllerModelT | None:
         rawval = self.cdb.rclient.get(f"{self.key}:{key}")
+        return self._deserialize(rawval) # type: ignore
 
-        if rawval is None:
-            return None
 
-        if self.model:
-            obj = self.model.model_validate_json(rawval) # type: ignore
-        else:
-            obj = rawval
+    def pop(self, key: str) -> CacheControllerModelT | None:
+        rawval = self.cdb.rclient.getdel(f"{self.key}:{key}")
+        return self._deserialize(rawval) # type: ignore
+    
 
-        return obj # type: ignore
+    def getex(self,
+              key: str,
+              expires_in: int | None = None,
+              *,
+              expires_at: datetime | int | None = None,
+              persist: bool = False):
+        rawval = self.cdb.rclient.getex(
+            f"{self.key}:{key}",
+            ex=expires_in,
+            exat=expires_at,
+            persist=persist
+        )
+        return self._deserialize(rawval) # type: ignore
+
+
+    def getset(self,
+               key: str,
+               value: CacheControllerModelT) -> CacheControllerModelT | None:
+        valdata = self._serialize_value(value)
+        rawval = self.cdb.rclient.getset(f"{self.key}:{key}", valdata)
+        return self._deserialize(rawval) # type: ignore
 
 
     def ttl(self, key: str) -> int | None:
