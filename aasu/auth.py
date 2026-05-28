@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 import jwt
 from jwt import PyJWK
 from jwt.types import Options as JwtOptions
-from jwt.algorithms import AllowedPublicKeys, get_default_algorithms
+from jwt.algorithms import AllowedPublicKeys, AllowedPrivateKeys, get_default_algorithms
 
 from .exceptions import JwtDenied
 
@@ -20,7 +20,9 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 
 class JwtAuthConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    key: AllowedPublicKeys | PyJWK | str | bytes
+    encodekey: AllowedPrivateKeys | PyJWK | str | bytes | None = None
+    decodekey: AllowedPublicKeys | PyJWK | str | bytes | None = None
+    key: PyJWK | str | bytes | None = None # symetric only
     algorithms: list[str] | None = None
     issuer: str | None = None
     audience: list[str] | None = None
@@ -71,8 +73,11 @@ class JwtAuthenticator(Generic[AuthDataT]):
         if config.audience is not None:
             tokeninfo["aud"] = config.audience
 
+        encodekey = config.encodekey or config.key
+        assert encodekey, "There is not either encodekey or key, you need to put one lil bro"
+
         payload = tokeninfo | obj.model_dump(mode="json") | (extra_data or {})
-        jwtoken = jwt.encode(payload, config.key)
+        jwtoken = jwt.encode(payload, encodekey)
         return jwtoken
 
 
@@ -85,11 +90,14 @@ class JwtAuthenticator(Generic[AuthDataT]):
         if not algorithms:
             algorithms = list(get_default_algorithms().keys())
 
+        decodekey = config.decodekey or config.key
+        assert decodekey, "There is not either decodekey or key, you need to put one lil bro"
+
         try:
             cls.verify_jwt(token)
             data = jwt.decode(
                 token,
-                config.key,
+                decodekey,
                 algorithms=algorithms,
                 options=opts,
                 issuer=config.issuer
