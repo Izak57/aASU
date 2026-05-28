@@ -118,7 +118,7 @@ class Collection(Generic[ColModelT]):
         return cursor
 
 
-    def aggregate(self, pipeline: list[dict[str, Any]]) -> AggregateCursor:
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor":
         """Perform aggregation pieplines inside the collection"""
         cursor = AggregateCursor(self, pipeline)
         return cursor
