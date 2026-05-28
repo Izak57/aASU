@@ -32,19 +32,24 @@ class JwtAuthConfig(BaseModel):
     """JWT issuer (iss key)"""
     audience: list[str] | None = None
     """JWT audience (aud key)"""
-    expiration: int | None = None # TODO: or timedelta
-    """JWT expiration is seconds (exp key)"""
+    expiration: timedelta | int | None = None # TODO: or timedelta
+    """JWT expiration in seconds or as a timedelta (exp key)"""
 
 
 
 class JwtAuthenticator(Generic[AuthDataT]):
+    """Base class to create an authentification method
+    with JSON Web Tokens.
+    """
 
     def __init__(self, data: AuthDataT) -> None:
         self.data = data
+        """The object that was in the JWT"""
 
 
     def __init_subclass__(cls, model: type[AuthDataT]) -> None:
         cls._auth_data_model = model
+        """The model of the payload in the JWT"""
 
 
     def __repr__(self) -> str:
@@ -56,11 +61,15 @@ class JwtAuthenticator(Generic[AuthDataT]):
 
     @staticmethod
     def verify_jwt(token: str) -> None:
+        """A checker function that verifies the JWT
+        before its decoding"""
         ...
 
 
     @staticmethod
     def verify_data(data: dict[str, Any]) -> None:
+        """A chercker function that verifies the data
+        before its validation by the model"""
         ...
 
 
@@ -69,6 +78,8 @@ class JwtAuthenticator(Generic[AuthDataT]):
                  obj: AuthDataT,
                  config: JwtAuthConfig,
                  extra_data: dict[str, Any] | None = None) -> str:
+        """Generates a JSON Web Token with the given data
+        and configuration"""
         iat = datetime.now()
         tokeninfo = {
             "jti": token_urlsafe(6),
@@ -82,7 +93,10 @@ class JwtAuthenticator(Generic[AuthDataT]):
             tokeninfo["aud"] = config.audience
 
         if config.expiration is not None:
-            tokeninfo["exp"] = int((iat + timedelta(seconds=config.expiration)).timestamp())
+            exptd = config.expiration \
+                if isinstance(config.expiration, timedelta) \
+                else timedelta(seconds=config.expiration)
+            tokeninfo["exp"] = int((iat + exptd).timestamp())
 
         encodekey = config.encodekey or config.key
         assert encodekey, "There is not either encodekey or key, you need to put one lil bro"
@@ -97,6 +111,8 @@ class JwtAuthenticator(Generic[AuthDataT]):
              token: str,
              config: JwtAuthConfig,
              opts: JwtOptions | None = None) -> Self:
+        """Loads a JSON Web Token and returns an auth
+        with the object inside the JWT payload as .data"""
         algorithms = config.algorithms
         if not algorithms:
             algorithms = list(get_default_algorithms().keys())

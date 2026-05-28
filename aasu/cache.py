@@ -17,7 +17,9 @@ class CacheDatabase:
 
     def __init__(self, rclient: Redis) -> None:
         self.rclient = rclient
+        """The Redis client"""
         self.app: FastAPI | None = None
+        """The FastAPI application (not used)"""
         self._controllers: list[CacheController] = []
 
 
@@ -58,9 +60,13 @@ class CacheController(Generic[CacheControllerModelT]):
                  model: CacheControllerModelT | None = None,
                  default_expiration: int | None = None) -> None:
         self.cdb = cdb
+        """The database"""
         self.key = key
+        """The prefix used to store objects"""
         self.model = model
+        """The Pydantic model of the objects you want to cache"""
         self.default_expiration = default_expiration
+        """A default expiration (in seconds) for every stored object"""
 
 
     def __getitem__(self, key: str):
@@ -103,6 +109,7 @@ class CacheController(Generic[CacheControllerModelT]):
             *,
             expires_at: datetime | int | None = None,
             keep_ttl: bool = False) -> None:
+        """Set an object into the collection"""
         if expires_at:
             expi = None
 
@@ -130,11 +137,13 @@ class CacheController(Generic[CacheControllerModelT]):
 
 
     def get(self, key: str) -> CacheControllerModelT | None:
+        """Get an object by its key from the collection"""
         rawval = self.cdb.rclient.get(f"{self.key}:{key}")
         return self._deserialize(rawval) # type: ignore
 
 
     def pop(self, key: str) -> CacheControllerModelT | None:
+        """Get an object then deletes it"""
         rawval = self.cdb.rclient.getdel(f"{self.key}:{key}")
         return self._deserialize(rawval) # type: ignore
     
@@ -145,6 +154,7 @@ class CacheController(Generic[CacheControllerModelT]):
               *,
               expires_at: datetime | int | None = None,
               persist: bool = False):
+        """Get an object then set an expiration"""
         rawval = self.cdb.rclient.getex(
             f"{self.key}:{key}",
             ex=expires_in,
@@ -157,10 +167,12 @@ class CacheController(Generic[CacheControllerModelT]):
     def getset(self,
                key: str,
                value: CacheControllerModelT) -> CacheControllerModelT | None:
+        """Get an object then set its next value"""
         valdata = self._serialize_value(value)
         rawval = self.cdb.rclient.getset(f"{self.key}:{key}", valdata)
         return self._deserialize(rawval) # type: ignore
 
 
     def ttl(self, key: str) -> int | None:
+        """Returns the time-to-live of an object"""
         return self.cdb.rclient.ttl(f"{self.key}:{key}") # type: ignore
