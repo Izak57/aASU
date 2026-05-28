@@ -2,7 +2,7 @@ from typing import TypeVar, Generic, Any, Self
 from secrets import token_urlsafe
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import jwt
 from jwt import PyJWK
 from jwt.types import Options as JwtOptions
@@ -19,6 +19,7 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 
 
 class JwtAuthConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     key: AllowedPublicKeys | PyJWK | str | bytes
     issuer: str | None = None
     audience: list[str] | None = None
@@ -34,6 +35,13 @@ class JwtAuthenticator(Generic[AuthDataT]):
 
     def __init_subclass__(cls, model: type[AuthDataT]) -> None:
         cls._auth_data_model = model
+
+
+    def __repr__(self) -> str:
+        return "<{} data={!r}>".format(
+            self.__class__.__name__,
+            self.data
+        )
 
 
     @staticmethod
