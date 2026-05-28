@@ -49,6 +49,7 @@ cfg = aasu.JwtAuthConfig(
 
 
 movies = db.collection("movies", model=Movie)
+users = db.collection("users", model=User)
 
 
 def getMovie(id: str) -> Movie:
@@ -88,7 +89,10 @@ def getMovieDetail(mv: Movie = Depends(getMovie),
 @app.post("/authenticate")
 def createAuthUser(username: str = Body(...), bod = Body(None)):
     user = User(username=username, features=[])
-    token = AccountAuth.generate(user, config=cfg)
+    users.insert(user)
+
+    userctx = UserAuthCtx(userid=user.id, features=user.features)
+    token = AccountAuth.generate(userctx, config=cfg)
     return {"token": token}
 
 
