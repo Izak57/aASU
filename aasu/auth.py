@@ -1,6 +1,6 @@
 from typing import TypeVar, Generic, Any, Self
 from secrets import token_urlsafe
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict
 import jwt
@@ -21,12 +21,19 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 class JwtAuthConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     encodekey: AllowedPrivateKeys | PyJWK | str | bytes | None = None
+    """The key used to encode (private) a JWTs (prefer using .key if symetric)"""
     decodekey: AllowedPublicKeys | PyJWK | str | bytes | None = None
+    """The key used to decode (public) a JWTs (prefer using .key if symetric)"""
     key: PyJWK | str | bytes | None = None # symetric only
+    """The key used to both encode and decode JWTs (symetric)"""
     algorithms: list[str] | None = None
+    """The list of supported algorithms during JWT decoding"""
     issuer: str | None = None
+    """JWT issuer (iss key)"""
     audience: list[str] | None = None
-    expires_in: int | None = None
+    """JWT audience (aud key)"""
+    expiration: int | None = None # TODO: or timedelta
+    """JWT expiration is seconds (exp key)"""
 
 
 
@@ -62,9 +69,10 @@ class JwtAuthenticator(Generic[AuthDataT]):
                  obj: AuthDataT,
                  config: JwtAuthConfig,
                  extra_data: dict[str, Any] | None = None) -> str:
+        iat = datetime.now()
         tokeninfo = {
             "jti": token_urlsafe(6),
-            "iat": int(datetime.now().timestamp())
+            "iat": int(iat.timestamp())
         }
 
         if config.issuer is not None:
@@ -72,6 +80,9 @@ class JwtAuthenticator(Generic[AuthDataT]):
 
         if config.audience is not None:
             tokeninfo["aud"] = config.audience
+
+        if config.expiration is not None:
+            tokeninfo["exp"] = int((iat + timedelta(seconds=config.expiration)).timestamp())
 
         encodekey = config.encodekey or config.key
         assert encodekey, "There is not either encodekey or key, you need to put one lil bro"
