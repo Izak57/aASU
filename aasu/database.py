@@ -131,6 +131,7 @@ class Collection(Generic[ColModelT]):
 
 
     def get(self, id: Any) -> "ColModelT | None":
+        """Returns the object with the given primary key value"""
         return self.find_one({self.primary_key: id})
 
 

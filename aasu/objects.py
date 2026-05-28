@@ -15,6 +15,8 @@ class APIModel(BaseModel):
 
 def apiserialize(obj: APIModel | BaseModel,
                  privacy: str | None = None):
+    """Serializes the given object to a JSON-serializable format, using the
+    apiserialize or model_dump method"""
     if isinstance(obj, APIModel):
         l1 = obj.apiserialize(privacy=privacy)
     else:
