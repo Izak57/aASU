@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from pymongo.cursor import Cursor as PyMongoCursor
 from pymongo.command_cursor import CommandCursor as PyMongoCommandCursor
+from fastapi import Depends
 
 
 __all__ = ["Database", "Collection", "Cursor", "AggregateCursor"]
@@ -127,13 +128,24 @@ class Cursor(Generic[ColModelT]):
                  collection: Collection[ColModelT],
                  filters: dict[str, Any],
                  limit: int | None = None,
-                 projection: dict[str, Any] | None = None):
+                 projection: dict[str, Any] | None = None,
+                 skip_offset: int = 0):
         self.collection = collection
         self.filters = filters
         self.record_limit = limit
         self.projection = projection
-        self.skip_offset = 0
+        self.skip_offset = skip_offset
         self.current_cursor: PyMongoCursor | None = None
+    
+
+    def copy(self) -> "Cursor":
+        return Cursor(
+            collection=self.collection,
+            filters=self.filters.copy(),
+            limit=self.record_limit,
+            projection=(self.projection or {}).copy(),
+            skip_offset=self.skip_offset
+        )
 
 
     def filter(self, filters: dict[str, Any]) -> Self:
