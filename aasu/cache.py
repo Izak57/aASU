@@ -14,8 +14,10 @@ CacheControllerModelT = TypeVar("CacheControllerModelT")
 
 
 class CacheDatabase:
+    """Manages a Redis-backed cache and provides access to CacheController instances."""
 
     def __init__(self, rclient: Redis) -> None:
+        """Initialize the cache database with a Redis client."""
         self.rclient = rclient
         """The Redis client"""
         self.app: FastAPI | None = None
@@ -44,6 +46,7 @@ class CacheDatabase:
                model = None,
                *,
                default_expiration: int | None = None):
+        """Create and register a CacheController for the given key and optional model."""
         controller = CacheController(self, key, model=model, default_expiration=default_expiration)
         self._controllers.append(controller)
         return controller
@@ -52,6 +55,7 @@ class CacheDatabase:
 
 
 class CacheController(Generic[CacheControllerModelT]):
+    """Controls access to a namespaced subset of the Redis cache."""
 
     def __init__(self,
                  cdb: CacheDatabase,
@@ -59,6 +63,7 @@ class CacheController(Generic[CacheControllerModelT]):
                  *,
                  model: CacheControllerModelT | None = None,
                  default_expiration: int | None = None) -> None:
+        """Initialize the controller with a database, key prefix, optional model, and default expiration."""
         self.cdb = cdb
         """The database"""
         self.key = key
@@ -70,14 +75,17 @@ class CacheController(Generic[CacheControllerModelT]):
 
 
     def __getitem__(self, key: str):
+        """Return the cached object at the given key."""
         return self.get(key)
 
 
     def __setitem__(self, key: str, value):
+        """Store a value at the given key in the cache."""
         self.set(key, value)
 
 
     def _deserialize(self, rawval: str | None) -> Any:
+        """Deserialize a raw Redis string value into the configured model or a plain string."""
         if rawval is None:
             return None
 
@@ -90,6 +98,7 @@ class CacheController(Generic[CacheControllerModelT]):
 
 
     def _serialize_value(self, value: Any) -> str:
+        """Serialize a value to a JSON string for storage in Redis."""
         if isinstance(value, BaseModel):
             valdata = value.model_dump_json()
 
