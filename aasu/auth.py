@@ -19,6 +19,8 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 
 
 class JwtAuthConfig(BaseModel):
+    """Configuration model for JWT encoding and decoding."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     encodekey: AllowedPrivateKeys | PyJWK | str | bytes | None = None
     """The key used to encode (private) a JWTs (prefer using .key if symetric)"""
@@ -43,16 +45,19 @@ class JwtAuthenticator(Generic[AuthDataT]):
     """
 
     def __init__(self, data: AuthDataT) -> None:
+        """Initialize the authenticator with the decoded JWT data."""
         self.data = data
         """The object that was in the JWT"""
 
 
     def __init_subclass__(cls, model: type[AuthDataT]) -> None:
+        """Register the payload model for the subclass."""
         cls._auth_data_model = model
         """The model of the payload in the JWT"""
 
 
     def __repr__(self) -> str:
+        """Return a string representation of the authenticator."""
         return "<{} data={!r}>".format(
             self.__class__.__name__,
             self.data
