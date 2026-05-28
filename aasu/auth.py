@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 import jwt
 from jwt import PyJWK
 from jwt.types import Options as JwtOptions
-from jwt.algorithms import AllowedPublicKeys
+from jwt.algorithms import AllowedPublicKeys, get_default_algorithms
 
 from .exceptions import JwtDenied
 
@@ -21,6 +21,7 @@ AuthDataT = TypeVar("AuthDataT", bound=BaseModel)
 class JwtAuthConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     key: AllowedPublicKeys | PyJWK | str | bytes
+    algorithms: list[str] | None = None
     issuer: str | None = None
     audience: list[str] | None = None
     expires_in: int | None = None
@@ -64,6 +65,12 @@ class JwtAuthenticator(Generic[AuthDataT]):
             "iat": int(datetime.now().timestamp())
         }
 
+        if config.issuer is not None:
+            tokeninfo["iss"] = config.issuer
+
+        if config.audience is not None:
+            tokeninfo["aud"] = config.audience
+
         payload = tokeninfo | obj.model_dump(mode="json") | (extra_data or {})
         jwtoken = jwt.encode(payload, config.key)
         return jwtoken
@@ -74,11 +81,16 @@ class JwtAuthenticator(Generic[AuthDataT]):
              token: str,
              config: JwtAuthConfig,
              opts: JwtOptions | None = None) -> Self:
+        algorithms = config.algorithms
+        if not algorithms:
+            algorithms = list(get_default_algorithms().keys())
+
         try:
             cls.verify_jwt(token)
             data = jwt.decode(
                 token,
                 config.key,
+                algorithms=algorithms,
                 options=opts,
                 issuer=config.issuer
             )

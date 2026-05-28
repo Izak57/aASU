@@ -3,7 +3,7 @@ from secrets import token_urlsafe
 
 import aasu
 from pydantic import Field, BaseModel
-from fastapi import FastAPI, Depends, Body
+from fastapi import FastAPI, Depends, Body, Header
 from uvicorn import run
 
 
@@ -37,6 +37,16 @@ class UserAuthCtx(BaseModel):
     userid: str
     features: list[Feature]
 
+class AccountAuth(aasu.JwtAuthenticator, model=UserAuthCtx):
+    ...
+
+
+cfg = aasu.JwtAuthConfig(
+    key="secretkeytest",
+    issuer="aasu-test",
+    expires_in=5*60
+)
+
 
 movies = db.collection("movies", model=Movie)
 
@@ -47,25 +57,39 @@ def getMovie(id: str) -> Movie:
         raise
     return mv
 
+def uauth(authorization: str = Header()) -> AccountAuth:
+    auth = AccountAuth.load(authorization.split()[1], config=cfg)
+    return auth
+
 
 @app.post("/movies/new")
 def createMovie(title: str = Body(...),
                 vote: float = Body(...),
-                genres: list[Genre] = Body(...)):
+                genres: list[Genre] = Body(...),
+                acc: AccountAuth = Depends(uauth)):
     mv = Movie(title=title, vote=vote, genres=genres)
     movies.insert(mv)
+    print("Using account", acc.data)
     return aasu.apiserialize(mv)
 
 
 @app.get("/movies")
-def getAllMovies():
+def getAllMovies(acc: AccountAuth = Depends(uauth)):
     mvs = movies.find({}).all()
     return [aasu.apiserialize(mv) for mv in mvs]
 
 
 @app.get("/movies/{id}")
-def getMovieDetail(mv: Movie = Depends(getMovie)):
+def getMovieDetail(mv: Movie = Depends(getMovie),
+                   acc: AccountAuth = Depends(uauth)):
     return aasu.apiserialize(mv)
+
+
+@app.post("/authenticate")
+def createAuthUser(username: str = Body(...), bod = Body(None)):
+    user = User(username=username, features=[])
+    token = AccountAuth.generate(user, config=cfg)
+    return {"token": token}
 
 
 
