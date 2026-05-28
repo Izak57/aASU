@@ -21,12 +21,15 @@ class Database:
                  db_name: str,
                  *,
                  mongo_client: MongoClient | None = None):
+        """Initialize a database connection with a given
+        MongoDB URL or client"""
         if mongo_client is not None:
             self.client = mongo_client
         else:
             self.client = MongoClient(uri)
 
         self.db = self.client[db_name]
+        """The pymongo database instance (used in internal)"""
         self._collections: dict[str, Collection[Any]] = {}
 
 
@@ -56,6 +59,8 @@ class Database:
                    model: Type[ColModelT] | None = None,
                    *,
                    primary_key: str = "id") -> "Collection[ColModelT]":
+        """Creates a collection/table of data  following
+        a given Pydantic Model"""
         if name in self._collections:
             return self._collections[name]
 
@@ -77,6 +82,8 @@ class Collection(Generic[ColModelT]):
                  model: Type[ColModelT] | None = None,
                  *,
                  primary_key: str = "id"):
+        """Initialize a collection of data from a database.
+        Prefer using db.collection() function instead."""
         self.name = name
         self.database = database
         self.model = model
@@ -84,10 +91,12 @@ class Collection(Generic[ColModelT]):
 
     @property
     def collection(self):
+        """The pymongo collection instance (used in internal)"""
         return self.database.db[self.name]
 
 
     def insert(self, *objs: ColModelT | dict[str, Any]) -> None:
+        """Insert one or many objects into the collection"""
         dict_objs = []
         for obj in objs:
             if isinstance(obj, BaseModel):
@@ -103,16 +112,20 @@ class Collection(Generic[ColModelT]):
              *,
              limit: int | None = None,
              projection: dict[str, Any] | None = None) -> "Cursor[ColModelT]":
+        """Finds objects in the collection.
+        Actually creates a cursor"""
         cursor = Cursor(self, filters.copy(), limit=limit, projection=projection)
         return cursor
 
 
     def aggregate(self, pipeline: list[dict[str, Any]]) -> AggregateCursor:
+        """Perform aggregation pieplines inside the collection"""
         cursor = AggregateCursor(self, pipeline)
         return cursor
 
 
     def find_one(self, filters: dict[str, Any]) -> "ColModelT | None":
+        """Returns the first object that matches the filters"""
         cursor = self.find(filters, limit=1)
         return next(cursor, None)
 
