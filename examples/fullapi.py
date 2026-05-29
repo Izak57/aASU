@@ -7,7 +7,7 @@ from fastapi import FastAPI, Depends, Body, Header
 from uvicorn import run
 
 
-app = FastAPI()
+app = aasu.useapp(FastAPI())
 db = aasu.Database("mongodb://localhost:27017/", "aasu_movies")
 
 type Genre = Literal["horror", "drama", "animation", "romance", "action", "sci-fi"]
@@ -44,7 +44,7 @@ class AccountAuth(aasu.JwtAuthenticator, model=UserAuthCtx):
 cfg = aasu.JwtAuthConfig(
     key="secretkeytest",
     issuer="aasu-test",
-    expires_in=5*60
+    expiration=5*60
 )
 
 
@@ -77,9 +77,9 @@ def createMovie(title: str = Body(...),
 @app.get("/movies")
 def getAllMovies(acc: AccountAuth = Depends(uauth)):
     mvs = movies.find({}).all()
-    return aasu.apiserialize({
+    return {
         "movies": mvs
-    })
+    }
 
 
 @app.get("/movies/{id}")

@@ -1,22 +1,34 @@
 from typing import Any
+from json import dumps
 
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
+from fastapi.datastructures import DefaultPlaceholder
 
 from .objects import APIModel, apiserialize
 
 
-__all__ = ["FastAPICompatibleJSONResponse"]
+__all__ = ["FastAPICompatibleJSONResponse", "useapp"]
 
 
 
 class FastAPICompatibleJSONResponse(JSONResponse):
 
     def render(self, content: Any) -> bytes:
-        encoded = jsonable_encoder(
-            content,
-            custom_encoder={
-                APIModel: lambda o: apiserialize(o, privacy=None)
-            }
-        )
-        return super().render(encoded)
+        print("rendering ahh", content, apiserialize(content))
+        return super().render(apiserialize(content))
+
+
+def compatible_renderer(self, content: Any) -> bytes:
+    content = apiserialize(content)
+    return super(self).render(content)
+
+
+def useapp(app: FastAPI) -> FastAPI:
+    respclass = app.router.default_response_class
+    if isinstance(respclass, DefaultPlaceholder):
+        app.router.default_response_class = FastAPICompatibleJSONResponse
+
+    elif issubclass(respclass, JSONResponse):
+        app.router.default_response_class.render = compatible_renderer
+    return app
