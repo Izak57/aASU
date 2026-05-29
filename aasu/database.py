@@ -118,7 +118,7 @@ class Collection(Generic[ColModelT]):
         return cursor
 
 
-    def aggregate(self, pipeline: list[dict[str, Any]]) -> AggregateCursor:
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor":
         """Perform aggregation pieplines inside the collection"""
         cursor = AggregateCursor(self, pipeline)
         return cursor
@@ -131,6 +131,7 @@ class Collection(Generic[ColModelT]):
 
 
     def get(self, id: Any) -> "ColModelT | None":
+        """Returns the object with the given primary key value"""
         return self.find_one({self.primary_key: id})
 
 
