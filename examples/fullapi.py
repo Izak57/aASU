@@ -77,7 +77,9 @@ def createMovie(title: str = Body(...),
 @app.get("/movies")
 def getAllMovies(acc: AccountAuth = Depends(uauth)):
     mvs = movies.find({}).all()
-    return [aasu.apiserialize(mv) for mv in mvs]
+    return aasu.apiserialize({
+        "movies": mvs
+    })
 
 
 @app.get("/movies/{id}")

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from fastapi.encoders import jsonable_encoder
 
 
@@ -10,15 +10,21 @@ class APIModel(BaseModel):
 
     def apiserialize(self, privacy: str | None = None):
         return self.model_dump(mode="json")
-    
 
 
-def apiserialize(obj: APIModel | BaseModel,
+
+def apiserialize(obj: APIModel | BaseModel | dict | list,
                  privacy: str | None = None):
     if isinstance(obj, APIModel):
         l1 = obj.apiserialize(privacy=privacy)
-    else:
+
+    elif isinstance(obj, BaseModel):
         l1 = obj.model_dump(mode="json")
 
-    secure_layer = jsonable_encoder(l1)
+    else:
+        l1 = obj
+
+    secure_layer = jsonable_encoder(l1, custom_encoder={
+        APIModel: lambda o: apiserialize(o, privacy=privacy)
+    })
     return secure_layer
