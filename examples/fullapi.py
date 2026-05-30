@@ -81,7 +81,7 @@ def getAllMovies(acc: AccountAuth = Depends(uauth)):
     print(c.all())
     return aasu.apiserialize({
         "movies": mvs
-    }
+    })
 
 
 @app.get("/movies/{id}")
