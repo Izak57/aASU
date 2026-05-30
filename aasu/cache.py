@@ -77,6 +77,10 @@ class CacheController(Generic[CacheControllerModelT]):
         self.set(key, value)
 
 
+    def __delitem__(self, key: str) -> None:
+        self.delete(key)
+
+
     def _deserialize(self, rawval: str | None) -> Any:
         if rawval is None:
             return None
@@ -140,6 +144,14 @@ class CacheController(Generic[CacheControllerModelT]):
         """Get an object by its key from the collection"""
         rawval = self.cdb.rclient.get(f"{self.key}:{key}")
         return self._deserialize(rawval) # type: ignore
+
+
+    def delete(self, key: str) -> None:
+        """Delete an object by its key from the collection"""
+        self.cdb.rclient.delete(f"{self.key}:{key}")
+
+
+    remove = delete
 
 
     def pop(self, key: str) -> CacheControllerModelT | None:

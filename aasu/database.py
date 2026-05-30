@@ -190,6 +190,17 @@ class Collection(Generic[ColModelT]):
         return self.collection.count_documents(filters)
 
 
+    def delete(self, filters: dict[str, Any] | str) -> None:
+        """Delete objects in the collection that match the filters
+        The filters can be a dict of filters or a primary key value"""
+        ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
+        self.collection.delete_many(ftrs)
+
+
+    def __delitem__(self, id: Any) -> None:
+        self.delete(id)
+
+
 
 class Cursor(Generic[ColModelT]):
 
@@ -255,7 +266,7 @@ class Cursor(Generic[ColModelT]):
         if self.skip_offset > 0:
             cursor = cursor.skip(self.skip_offset)
 
-        if self.sort_data is not None:
+        if self.sort_data:
             cursor = cursor.sort(self.sort_data)
 
         self.current_cursor = cursor
@@ -272,10 +283,7 @@ class Cursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        if self.current_cursor is None:
-            self._build_cursor()
-
-        return self
+        return self._build_cursor()
 
 
     def __next__(self) -> "ColModelT":
