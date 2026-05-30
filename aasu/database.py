@@ -1,4 +1,4 @@
-from typing import Any, Self, Type, TypeVar, Generic, overload
+from typing import Any, Self, Type, TypeVar, Generic, overload, cast
 
 from pydantic import BaseModel
 from pymongo import MongoClient
@@ -124,6 +124,46 @@ class Collection(Generic[ColModelT]):
             limit=limit, projection=projection, sort_data=sort
         )
         return cursor
+
+
+    def insert_or_update(self, obj: ColModelT | dict[str, Any]) -> None:
+        """Insert or update a object into the collection.
+        The object is updated if the primary key value already exists."""
+        if isinstance(obj, BaseModel):
+            dict_obj = obj.model_dump(mode="json")
+        else:
+            dict_obj = cast(dict[str, Any], obj)
+
+        primarykey = dict_obj[self.primary_key]
+        filters = {self.primary_key: primarykey}
+
+        exists = self.count(filters) > 0
+
+        if exists:
+            self.update_one(filters, {"$set": dict_obj})
+        else:
+            self.insert(dict_obj)
+
+
+    def update(self,
+               filters: dict[str, Any] | str,
+               update_data: dict[str, Any]) -> None:
+        """Update objects in the collection that match the filters
+        The filters can be a dict of filters or a primary key value"""
+        ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
+        self.collection.update_many(ftrs, update_data)
+
+
+    def update_one(self,
+                   filters: dict[str, Any] | str,
+                   update_data: dict[str, Any],
+                   *,
+                   sort: list[tuple[str, int]] | dict[str, int] | None = None) -> None:
+        """Update a single object in the collection that matches the filters
+        The filters can be a dict of filters or a primary key value"""
+        ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
+        sortt = dict(sort) if isinstance(sort, list) else sort
+        self.collection.update_one(ftrs, update_data, sort=sortt)
 
 
     def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor":
