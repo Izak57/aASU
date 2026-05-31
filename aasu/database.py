@@ -116,12 +116,15 @@ class Collection(Generic[ColModelT]):
              *,
              limit: int | None = None,
              sort: list[tuple[str, int]] | None = None,
+             skip: int | None = None,
              projection: dict[str, Any] | None = None) -> "Cursor[ColModelT]":
         """Finds objects in the collection.
         Actually creates a cursor"""
         cursor = Cursor(
             self, filters.copy(),
-            limit=limit, projection=projection, sort_data=sort
+            limit=limit, projection=projection,
+            skip_offset=skip or 0,
+            sort_data=sort
         )
         return cursor
 
