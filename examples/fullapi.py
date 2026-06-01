@@ -37,14 +37,14 @@ class UserAuthCtx(BaseModel):
     userid: str
     features: list[Feature]
 
-class AccountAuth(aasu.JwtAuthenticator, model=UserAuthCtx):
+class AccountAuth(aasu.JwtAuthenticator[UserAuthCtx], model=UserAuthCtx):
     ...
 
 
 cfg = aasu.JwtAuthConfig(
     key="secretkeytest",
     issuer="aasu-test",
-    expiration=5*60
+    expiration=60*60
 )
 
 
@@ -79,7 +79,7 @@ def getAllMovies(acc: AccountAuth = Depends(uauth)):
     c = movies.find({})
     mvs = c.all()
     print(c.all())
-    return aasu.apiserialize({
+    return ({
         "movies": mvs
     })
 
