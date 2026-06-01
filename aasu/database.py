@@ -286,7 +286,9 @@ class Cursor(Generic[ColModelT]):
 
 
     def __iter__(self):
-        return self._build_cursor()
+        cc = self._build_cursor()
+        for obj in cc:
+            yield self._deserialize(obj)
 
 
     def __next__(self) -> "ColModelT":
