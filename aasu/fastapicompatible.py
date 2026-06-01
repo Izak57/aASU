@@ -16,8 +16,6 @@ __all__ = ["FastAPICompatibleJSONResponse", "useapp"]
 class FastAPICompatibleJSONResponse(JSONResponse):
 
     def render(self, content: Any) -> bytes:
-        print()
-        print("rendering ahh", type(content), content, "gives", apiserialize(content))
         return super().render(apiserialize(content))
 
 
