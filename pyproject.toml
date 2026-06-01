@@ -1,6 +1,6 @@
 [project]
 name = "aasu"
-version = "0.1.5"
+version = "0.1.6"
 description = "All-in-one Api Services and Utils"
 authors = [
     {name = "Izak",email = "frdev.izak@gmail.com"}
