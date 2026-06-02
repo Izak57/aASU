@@ -2,7 +2,6 @@ from typing import Any
 from json import dumps
 
 from fastapi import FastAPI
-from fastapi import encoders
 from fastapi.responses import JSONResponse
 from fastapi.datastructures import DefaultPlaceholder
 
@@ -25,14 +24,25 @@ def compatible_renderer(self, content: Any) -> bytes:
 
 
 def patch_encoder():
-    old = encoders.jsonable_encoder
+    import fastapi.encoders as _encoders
+    import fastapi.routing as _routing
+    import fastapi.dependencies.utils as _dep_utils
+
+    old = _encoders.jsonable_encoder
 
     def new(obj, **kwargs):
         if isinstance(obj, APIModel):
             return apiserialize(obj)
         return old(obj, **kwargs)
 
-    encoders.jsonable_encoder = new
+    # Also patch all modules that captured a direct reference at import time
+    _encoders.jsonable_encoder = new
+    _routing.jsonable_encoder = new # type: ignore
+
+    try:
+        _dep_utils.jsonable_encoder = new
+    except AttributeError:
+        pass
 
 
 def useapp(app: FastAPI) -> FastAPI:
