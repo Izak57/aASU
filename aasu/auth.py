@@ -57,8 +57,9 @@ class JwtAuthenticator(Generic[AuthDataT]):
 
 
     def __repr__(self) -> str:
-        return "<{} data={!r}>".format(
+        return "<{} jti={!r} data={!r}>".format(
             self.__class__.__name__,
+            self.jwt_id,
             self.data
         )
 

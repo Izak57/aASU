@@ -21,6 +21,13 @@ class CacheDatabase:
         self.app: FastAPI | None = None
         """The FastAPI application (not used)"""
         self._controllers: list[CacheController] = []
+    
+
+    def __repr__(self) -> str:
+        return "<{} ({} registered controllers)>".format(
+            self.__class__.__name__,
+            len(self._controllers)
+        )
 
 
     @overload
@@ -67,6 +74,14 @@ class CacheController(Generic[CacheControllerModelT]):
         """The Pydantic model of the objects you want to cache"""
         self.default_expiration = default_expiration
         """A default expiration (in seconds) for every stored object"""
+
+
+    def __repr__(self) -> str:
+        return "<{} key={!r} model={!r}>".format(
+            self.__class__.__name__,
+            self.key,
+            self.model
+        )
 
 
     def __getitem__(self, key: str):

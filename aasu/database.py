@@ -38,6 +38,13 @@ class Database:
         self._collections: dict[str, Collection[Any]] = {}
 
 
+    def __repr__(self) -> str:
+        return "<{} ({} registered collections)>".format(
+            self.__class__.__name__,
+            len(self._collections)
+        )
+
+
     @overload
     def collection(
         self,
@@ -93,6 +100,15 @@ class Collection(Generic[ColModelT]):
         self.database = database
         self.model = model
         self.primary_key = primary_key
+
+
+    def __repr__(self) -> str:
+        return "<{} name={!r} model={!r}>".format(
+            self.__class__.__name__,
+            self.name,
+            self.model
+        )
+
 
     @property
     def collection(self):
@@ -238,6 +254,12 @@ class Cursor(Generic[ColModelT]):
         self.sort_data = sort_data or []
 
 
+    def __repr__(self) -> str:
+        return "<DatabaseCursor collection={}".format(
+            self.collection.name
+        )
+
+
     def copy(self) -> "Cursor":
         return Cursor(
             collection=self.collection,
@@ -334,6 +356,12 @@ class AggregateCursor(Generic[AggregateResultT]):
         self.pipeline = pipeline
         self.result_type = result_type
         self.current_cursor: PyMongoCommandCursor | None = None
+
+
+    def __repr__(self) -> str:
+        return "<DatabaseAggregateCursor collection={}>".format(
+            self.collection.name
+        )
 
 
     def __iter__(self):
