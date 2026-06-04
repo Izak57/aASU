@@ -42,9 +42,13 @@ class JwtAuthenticator(Generic[AuthDataT]):
     with JSON Web Tokens.
     """
 
-    def __init__(self, data: AuthDataT) -> None:
+    def __init__(self,
+                 data: AuthDataT,
+                 fulldata: dict[str, Any]) -> None:
         self.data = data
         """The object that was in the JWT"""
+        self.fulldata = fulldata
+        """The full data from the JWT"""
 
 
     def __init_subclass__(cls, model: type[AuthDataT]) -> None:
@@ -57,6 +61,60 @@ class JwtAuthenticator(Generic[AuthDataT]):
             self.__class__.__name__,
             self.data
         )
+
+
+    @property
+    def jwt_id(self) -> str:
+        """The JWT ID (jti) of the JWT"""
+        return self.fulldata.get("jti", "")
+
+
+    @property
+    def issued_at(self) -> datetime | None:
+        """The issued at (iat) of the JWT as a datetime object"""
+        iat = self.fulldata.get("iat")
+        if iat is not None:
+            return datetime.fromtimestamp(iat)
+        return None
+
+
+    @property
+    def expiration(self) -> datetime | None:
+        """The expiration (exp) of the JWT as a datetime object"""
+        exp = self.fulldata.get("exp")
+        if exp is not None:
+            return datetime.fromtimestamp(exp)
+        return None
+
+
+    @property
+    def subject(self) -> Any | None:
+        """The subject (sub) of the JWT"""
+        return self.fulldata.get("sub")
+
+
+    @property
+    def issuer(self) -> str | None:
+        """The issuer (iss) of the JWT"""
+        return self.fulldata.get("iss")
+
+
+    @property
+    def audience(self) -> list[str] | None:
+        """The audience (aud) of the JWT"""
+        aud = self.fulldata.get("aud")
+        if isinstance(aud, str):
+            return [aud]
+        return aud
+
+
+    @property
+    def not_before(self) -> datetime | None:
+        """The not before (nbf) of the JWT as a datetime object"""
+        nbf = self.fulldata.get("nbf")
+        if nbf is not None:
+            return datetime.fromtimestamp(nbf)
+        return None
 
 
     @staticmethod
@@ -138,5 +196,5 @@ class JwtAuthenticator(Generic[AuthDataT]):
         except Exception as e:
             raise JwtDenied("The data from the given JWT is invalid") from e
 
-        authenti = cls(authdata)
+        authenti = cls(authdata, data)
         return authenti
