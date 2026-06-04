@@ -1,4 +1,4 @@
-from typing import Any, Self, Type, TypeVar, Generic, overload, cast
+from typing import Any, Iterator, Self, Type, TypeVar, Generic, overload, cast
 
 from pydantic import BaseModel
 from pymongo import MongoClient
@@ -13,6 +13,7 @@ __all__ = [
 
 
 ColModelT = TypeVar("ColModelT")
+AggregateResultT = TypeVar("AggregateResultT")
 ASC = 1
 DESC = -1
 
@@ -169,9 +170,23 @@ class Collection(Generic[ColModelT]):
         self.collection.update_one(ftrs, update_data, sort=sortt)
 
 
-    def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor":
+    @overload
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> "AggregateCursor[dict[str, Any]]":
+        ...
+
+
+    @overload
+    def aggregate(self,
+                  pipeline: list[dict[str, Any]],
+                  result_type: Type[AggregateResultT]) -> "AggregateCursor[AggregateResultT]":
+        ...
+
+
+    def aggregate(self,
+                  pipeline: list[dict[str, Any]],
+                  result_type: Type[AggregateResultT] | None = None) -> "AggregateCursor":
         """Perform aggregation pieplines inside the collection"""
-        cursor = AggregateCursor(self, pipeline)
+        cursor = AggregateCursor(self, pipeline, result_type=result_type)
         return cursor
 
 
@@ -285,7 +300,7 @@ class Cursor(Generic[ColModelT]):
         return list(iter(self))
 
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[ColModelT]:
         cc = self._build_cursor()
         for obj in cc:
             yield self._deserialize(obj)
@@ -309,13 +324,15 @@ class Cursor(Generic[ColModelT]):
 
 
 
-class AggregateCursor:
+class AggregateCursor(Generic[AggregateResultT]):
 
     def __init__(self,
                  collection: Collection[ColModelT],
-                 pipeline: list[dict[str, Any]]) -> None:
+                 pipeline: list[dict[str, Any]],
+                 result_type: Type[AggregateResultT] | None = None) -> None:
         self.collection = collection
         self.pipeline = pipeline
+        self.result_type = result_type
         self.current_cursor: PyMongoCommandCursor | None = None
 
 
@@ -326,12 +343,15 @@ class AggregateCursor:
         return self
 
 
-    def __next__(self):
+    def __next__(self) -> AggregateResultT:
         if self.current_cursor is None:
             self._build_cursor()
 
         assert self.current_cursor is not None
         obj = next(self.current_cursor)
+
+        if self.result_type and issubclass(self.result_type, BaseModel):
+            return self.result_type.model_validate(obj)
         return obj
 
 

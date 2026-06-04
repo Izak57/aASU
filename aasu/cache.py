@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Any, overload, cast
+from typing import TypeVar, Generic, Generator, Any, overload, cast
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -188,3 +188,25 @@ class CacheController(Generic[CacheControllerModelT]):
     def ttl(self, key: str) -> int | None:
         """Returns the time-to-live of an object"""
         return self.cdb.rclient.ttl(f"{self.key}:{key}") # type: ignore
+
+
+    def scan(self, pattern: str = "*") -> Generator[str, None, None]:
+        """Returns a list of all keys in the collection matching the pattern"""
+        full_pattern = f"{self.key}:{pattern}"
+        for key in self.cdb.rclient.scan_iter(full_pattern):
+            yield key.decode("utf-8").split(":", 1)[1]
+
+
+    def purge(self, batch_size: int = 500) -> None:
+        """Clear all the collection"""
+        keys = [f"{self.key}:{k}" for k in self.scan()]
+        pipeline = self.cdb.rclient.pipeline()
+
+        for i, key in enumerate(keys):
+            pipeline.delete(key)
+
+            if (i + 1) % batch_size == 0:
+                pipeline.execute()
+                pipeline = self.cdb.rclient.pipeline()
+
+        pipeline.execute()
