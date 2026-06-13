@@ -22,18 +22,20 @@ DESC = -1
 class Database:
 
     def __init__(self,
-                 uri: str,
+                 uri: str | None,
                  db_name: str,
                  *,
                  mongo_client: MongoClient | None = None):
         """Initialize a database connection with a given
         MongoDB URL or client"""
-        if mongo_client is not None:
+        self.db_name = db_name
+
+        if mongo_client:
             self.client = mongo_client
-        else:
+
+        elif uri:
             self.client = MongoClient(uri)
 
-        self.db = self.client[db_name]
         """The pymongo database instance (used in internal)"""
         self._collections: dict[str, Collection[Any]] = {}
 
@@ -43,6 +45,22 @@ class Database:
             self.__class__.__name__,
             len(self._collections)
         )
+
+
+    @property
+    def db(self):
+        """The pymongo database instance (used in internal)"""
+        return self.client[self.db_name]
+
+
+    def connect(self,
+                uri: str | None,
+                mongo_client: MongoClient | None = None) -> None:
+        """Connect to a database with a given MongoDB URL or client"""
+        if mongo_client:
+            self.client = mongo_client
+        elif uri:
+            self.client = MongoClient(uri)
 
 
     @overload
@@ -79,7 +97,7 @@ class Database:
         col = Collection(name, self, model=model, primary_key=primary_key)
         self._collections[name] = col
         return col
-    
+
 
     def __getitem__(self, name: str) -> "Collection":
         return self.collection(name)

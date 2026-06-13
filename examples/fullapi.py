@@ -47,6 +47,9 @@ cfg = aasu.JwtAuthConfig(
     expiration=60*60
 )
 
+mgr = aasu.WorkerManager("movie-workers")
+mgr.connect("redis://localhost:6379/1")
+
 
 movies = db.collection("movies", model=Movie)
 users = db.collection("users", model=User)
@@ -56,6 +59,8 @@ def getMovie(id: str) -> Movie:
     mv = movies.get(id)
     if mv is None:
         raise
+
+    mgr.call("log_movie", {"title": mv.title})
     return mv
 
 def uauth(authorization: str = Header()) -> AccountAuth:

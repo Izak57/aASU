@@ -11,3 +11,8 @@ class AAsuError(Exception):
 class JwtDenied(InvalidTokenError):
     """Raised only when either verify_token or verify_data fails."""
     pass
+
+
+class DatabaseNotConnectedError(AAsuError, RuntimeError):
+    """Raised when the database connection is not established."""
+    pass

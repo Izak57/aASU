@@ -15,19 +15,25 @@ CacheControllerModelT = TypeVar("CacheControllerModelT")
 
 class CacheDatabase:
 
-    def __init__(self, rclient: Redis) -> None:
-        self.rclient = rclient
+    def __init__(self, rclient: Redis | None = None) -> None:
+        if rclient:
+            self.rclient = rclient
         """The Redis client"""
         self.app: FastAPI | None = None
         """The FastAPI application (not used)"""
         self._controllers: list[CacheController] = []
-    
+
 
     def __repr__(self) -> str:
         return "<{} ({} registered controllers)>".format(
             self.__class__.__name__,
             len(self._controllers)
         )
+
+
+    def set_redis_client(self, rclient: Redis) -> None:
+        """Set the Redis client"""
+        self.rclient = rclient
 
 
     @overload
@@ -38,6 +44,7 @@ class CacheDatabase:
                default_expiration: int | None = None) -> "CacheController[CacheControllerModelT]":
         ...
 
+
     @overload
     def cacher(self,
                key: str,
@@ -45,6 +52,7 @@ class CacheDatabase:
                *,
                default_expiration: int | None = None) -> "CacheController[str]":
         ...
+
 
     def cacher(self,
                key: str,
@@ -140,7 +148,7 @@ class CacheController(Generic[CacheControllerModelT]):
 
         elif expires_in == "default":
             expi = self.default_expiration
-        
+
         else:
             expi = expires_in
 
@@ -173,7 +181,7 @@ class CacheController(Generic[CacheControllerModelT]):
         """Get an object then deletes it"""
         rawval = self.cdb.rclient.getdel(f"{self.key}:{key}")
         return self._deserialize(rawval) # type: ignore
-    
+
 
     def getex(self,
               key: str,
