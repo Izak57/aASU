@@ -1,9 +1,11 @@
-from typing import Any, Iterator, Self, Type, TypeVar, Generic, overload, cast
+from typing import Any, AsyncIterator, Self, Type, TypeVar, Generic, overload, cast
 
 from pydantic import BaseModel
-from pymongo import MongoClient
-from pymongo.cursor import Cursor as PyMongoCursor
-from pymongo.command_cursor import CommandCursor as PyMongoCommandCursor
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorCursor,
+    AsyncIOMotorCommandCursor,
+)
 
 
 __all__ = [
@@ -25,7 +27,7 @@ class Database:
                  uri: str | None,
                  db_name: str,
                  *,
-                 mongo_client: MongoClient | None = None):
+                 mongo_client: AsyncIOMotorClient | None = None):
         """Initialize a database connection with a given
         MongoDB URL or client"""
         self.db_name = db_name
@@ -34,9 +36,9 @@ class Database:
             self.client = mongo_client
 
         elif uri:
-            self.client = MongoClient(uri)
+            self.client = AsyncIOMotorClient(uri)
 
-        """The pymongo database instance (used in internal)"""
+        """The motor database instance (used in internal)"""
         self._collections: dict[str, Collection[Any]] = {}
 
 
@@ -49,18 +51,18 @@ class Database:
 
     @property
     def db(self):
-        """The pymongo database instance (used in internal)"""
+        """The motor database instance (used in internal)"""
         return self.client[self.db_name]
 
 
     def connect(self,
                 uri: str | None,
-                mongo_client: MongoClient | None = None) -> None:
+                mongo_client: AsyncIOMotorClient | None = None) -> None:
         """Connect to a database with a given MongoDB URL or client"""
         if mongo_client:
             self.client = mongo_client
         elif uri:
-            self.client = MongoClient(uri)
+            self.client = AsyncIOMotorClient(uri)
 
 
     @overload
@@ -106,7 +108,7 @@ class Database:
 
 class Collection(Generic[ColModelT]):
 
-    def __init__(self, 
+    def __init__(self,
                  name: str,
                  database: Database,
                  model: Type[ColModelT] | None = None,
@@ -130,11 +132,11 @@ class Collection(Generic[ColModelT]):
 
     @property
     def collection(self):
-        """The pymongo collection instance (used in internal)"""
+        """The motor collection instance (used in internal)"""
         return self.database.db[self.name]
 
 
-    def insert(self, *objs: ColModelT | dict[str, Any]) -> None:
+    async def insert(self, *objs: ColModelT | dict[str, Any]) -> None:
         """Insert one or many objects into the collection"""
         dict_objs = []
         for obj in objs:
@@ -143,7 +145,7 @@ class Collection(Generic[ColModelT]):
             else:
                 dict_objs.append(obj)
 
-        self.collection.insert_many(dict_objs)
+        await self.collection.insert_many(dict_objs)
 
 
     def find(self,
@@ -164,7 +166,7 @@ class Collection(Generic[ColModelT]):
         return cursor
 
 
-    def insert_or_update(self, obj: ColModelT | dict[str, Any]) -> None:
+    async def insert_or_update(self, obj: ColModelT | dict[str, Any]) -> None:
         """Insert or update a object into the collection.
         The object is updated if the primary key value already exists."""
         if isinstance(obj, BaseModel):
@@ -175,33 +177,33 @@ class Collection(Generic[ColModelT]):
         primarykey = dict_obj[self.primary_key]
         filters = {self.primary_key: primarykey}
 
-        exists = self.count(filters) > 0
+        exists = await self.count(filters) > 0
 
         if exists:
-            self.update_one(filters, {"$set": dict_obj})
+            await self.update_one(filters, {"$set": dict_obj})
         else:
-            self.insert(dict_obj)
+            await self.insert(dict_obj)
 
 
-    def update(self,
-               filters: dict[str, Any] | str,
-               update_data: dict[str, Any]) -> None:
+    async def update(self,
+                     filters: dict[str, Any] | str,
+                     update_data: dict[str, Any]) -> None:
         """Update objects in the collection that match the filters
         The filters can be a dict of filters or a primary key value"""
         ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
-        self.collection.update_many(ftrs, update_data)
+        await self.collection.update_many(ftrs, update_data)
 
 
-    def update_one(self,
-                   filters: dict[str, Any] | str,
-                   update_data: dict[str, Any],
-                   *,
-                   sort: list[tuple[str, int]] | dict[str, int] | None = None) -> None:
+    async def update_one(self,
+                         filters: dict[str, Any] | str,
+                         update_data: dict[str, Any],
+                         *,
+                         sort: list[tuple[str, int]] | dict[str, int] | None = None) -> None:
         """Update a single object in the collection that matches the filters
         The filters can be a dict of filters or a primary key value"""
         ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
         sortt = dict(sort) if isinstance(sort, list) else sort
-        self.collection.update_one(ftrs, update_data, sort=sortt)
+        await self.collection.update_one(ftrs, update_data, sort=sortt)
 
 
     @overload
@@ -224,33 +226,29 @@ class Collection(Generic[ColModelT]):
         return cursor
 
 
-    def find_one(self,
-                 filters: dict[str, Any],
-                 projection: dict[str, Any] | None = None) -> "ColModelT | None":
+    async def find_one(self,
+                       filters: dict[str, Any],
+                       projection: dict[str, Any] | None = None) -> "ColModelT | None":
         """Returns the first object that matches the filters"""
         cursor = self.find(filters, limit=1, projection=projection)
-        return next(cursor, None)
+        return await cursor.first()
 
 
-    def get(self, id: Any) -> "ColModelT | None":
+    async def get(self, id: Any) -> "ColModelT | None":
         """Returns the object with the given primary key value"""
-        return self.find_one({self.primary_key: id})
+        return await self.find_one({self.primary_key: id})
 
 
-    def count(self, filters: dict[str, Any] = {}) -> int:
+    async def count(self, filters: dict[str, Any] = {}) -> int:
         """Returns the number of objects that match the filters"""
-        return self.collection.count_documents(filters)
+        return await self.collection.count_documents(filters)
 
 
-    def delete(self, filters: dict[str, Any] | str) -> None:
+    async def delete(self, filters: dict[str, Any] | str) -> None:
         """Delete objects in the collection that match the filters
         The filters can be a dict of filters or a primary key value"""
         ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
-        self.collection.delete_many(ftrs)
-
-
-    def __delitem__(self, id: Any) -> None:
-        self.delete(id)
+        await self.collection.delete_many(ftrs)
 
 
 
@@ -268,7 +266,6 @@ class Cursor(Generic[ColModelT]):
         self.record_limit = limit
         self.projection = projection
         self.skip_offset = skip_offset
-        self.current_cursor: PyMongoCursor | None = None
         self.sort_data = sort_data or []
 
 
@@ -296,7 +293,7 @@ class Cursor(Generic[ColModelT]):
     def limit(self, limit: int) -> Self:
         self.record_limit = limit
         return self
-    
+
 
     def skip(self, skip: int) -> Self:
         self.skip_offset = skip
@@ -313,7 +310,7 @@ class Cursor(Generic[ColModelT]):
         return self
 
 
-    def _build_cursor(self) -> PyMongoCursor:
+    def _build_cursor(self) -> AsyncIOMotorCursor:
         cursor = self.collection.collection.find(
             self.filters, projection=self.projection
         )
@@ -327,32 +324,25 @@ class Cursor(Generic[ColModelT]):
         if self.sort_data:
             cursor = cursor.sort(self.sort_data)
 
-        self.current_cursor = cursor
         return cursor
 
 
-    def first(self) -> ColModelT | None:
-        obj = next(iter(self), None)
-        return obj
+    async def first(self) -> ColModelT | None:
+        async for obj in self:
+            return obj
+        return None
 
 
-    def all(self) -> list[ColModelT]:
-        return list(iter(self))
+    async def all(self) -> list[ColModelT]:
+        cursor = self._build_cursor()
+        docs = await cursor.to_list(length=None)
+        return [self._deserialize(obj) for obj in docs]
 
 
-    def __iter__(self) -> Iterator[ColModelT]:
-        cc = self._build_cursor()
-        for obj in cc:
+    async def __aiter__(self) -> AsyncIterator[ColModelT]:
+        cursor = self._build_cursor()
+        async for obj in cursor:
             yield self._deserialize(obj)
-
-
-    def __next__(self) -> "ColModelT":
-        if self.current_cursor is None:
-            self._build_cursor()
-
-        assert self.current_cursor is not None
-        obj = next(self.current_cursor)
-        return self._deserialize(obj)
 
 
     def _deserialize(self, obj: dict[str, Any]) -> ColModelT:
@@ -373,7 +363,6 @@ class AggregateCursor(Generic[AggregateResultT]):
         self.collection = collection
         self.pipeline = pipeline
         self.result_type = result_type
-        self.current_cursor: PyMongoCommandCursor | None = None
 
 
     def __repr__(self) -> str:
@@ -382,23 +371,20 @@ class AggregateCursor(Generic[AggregateResultT]):
         )
 
 
-    def __iter__(self):
-        if self.current_cursor is None:
-            self._build_cursor()
+    async def __aiter__(self) -> AsyncIterator[AggregateResultT]:
+        cursor = self._build_cursor()
+        async for obj in cursor:
+            yield self._deserialize(obj)
 
-        return self
+
+    async def first(self) -> AggregateResultT | None:
+        async for obj in self:
+            return obj
+        return None
 
 
-    def __next__(self) -> AggregateResultT:
-        if self.current_cursor is None:
-            self._build_cursor()
-
-        assert self.current_cursor is not None
-        obj = next(self.current_cursor)
-
-        if self.result_type and issubclass(self.result_type, BaseModel):
-            return self.result_type.model_validate(obj)
-        return obj
+    async def all(self) -> list[AggregateResultT]:
+        return [obj async for obj in self]
 
 
     def add_line(self, *pipeline: dict[str, Any]) -> Self:
@@ -406,7 +392,11 @@ class AggregateCursor(Generic[AggregateResultT]):
         return self
 
 
-    def _build_cursor(self) -> PyMongoCommandCursor:
-        cursor = self.collection.collection.aggregate(self.pipeline)
-        self.current_cursor = cursor
-        return cursor
+    def _build_cursor(self) -> AsyncIOMotorCommandCursor:
+        return self.collection.collection.aggregate(self.pipeline)
+
+
+    def _deserialize(self, obj: dict[str, Any]) -> AggregateResultT:
+        if self.result_type and issubclass(self.result_type, BaseModel):
+            return self.result_type.model_validate(obj)
+        return obj # type: ignore
