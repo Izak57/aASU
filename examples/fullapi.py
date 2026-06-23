@@ -55,8 +55,8 @@ movies = db.collection("movies", model=Movie)
 users = db.collection("users", model=User)
 
 
-def getMovie(id: str) -> Movie:
-    mv = movies.get(id)
+async def getMovie(id: str) -> Movie:
+    mv = await movies.get(id)
     if mv is None:
         raise
 
@@ -69,21 +69,21 @@ def uauth(authorization: str = Header()) -> AccountAuth:
 
 
 @app.post("/movies/new")
-def createMovie(title: str = Body(...),
-                vote: float = Body(...),
-                genres: list[Genre] = Body(...),
-                acc: AccountAuth = Depends(uauth)):
+async def createMovie(title: str = Body(...),
+                      vote: float = Body(...),
+                      genres: list[Genre] = Body(...),
+                      acc: AccountAuth = Depends(uauth)):
     mv = Movie(title=title, vote=vote, genres=genres)
-    movies.insert(mv)
+    await movies.insert(mv)
     print("Using account", acc.data)
     return aasu.apiserialize(mv)
 
 
 @app.get("/movies")
-def getAllMovies(acc: AccountAuth = Depends(uauth)):
+async def getAllMovies(acc: AccountAuth = Depends(uauth)):
     c = movies.find({})
-    mvs = c.all()
-    print(c.all())
+    mvs = await c.all()
+    print(mvs)
     return ({
         "movies": mvs
     })
@@ -96,9 +96,9 @@ def getMovieDetail(mv: Movie = Depends(getMovie),
 
 
 @app.post("/authenticate")
-def createAuthUser(username: str = Body(...), bod = Body(None)):
+async def createAuthUser(username: str = Body(...), bod = Body(None)):
     user = User(username=username, features=[])
-    users.insert(user)
+    await users.insert(user)
 
     userctx = UserAuthCtx(userid=user.id, features=user.features)
     token = AccountAuth.generate(userctx, config=cfg)

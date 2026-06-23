@@ -1,6 +1,6 @@
 # aASU - All-in-One API Services and Utils
 
-A comprehensive Python library providing utilities for building API services with FastAPI, MongoDB integration, Redis caching, and JWT authentication.
+A comprehensive Python library providing utilities for building API services with FastAPI, async MongoDB integration (via [Motor](https://motor.readthedocs.io/)), Redis caching, and JWT authentication.
 
 ## Installation
 
@@ -11,7 +11,7 @@ pip install aasu
 ## Features
 
 - **APIModel**: Pydantic-based models with JSON serialization
-- **Database & Collection**: MongoDB integration with type-safe queries
+- **Database & Collection**: Async MongoDB integration with type-safe queries
 - **Caching**: Redis-backed caching with automatic expiration
 - **JWT Authentication**: Token-based authentication with customizable claims
 - **FastAPI Integration**: Built-in response serialization for FastAPI
@@ -24,13 +24,17 @@ pip install aasu
 from aasu import APIModel, Database, CacheDatabase, JwtAuthConfig, JwtAuthenticator
 from fastapi import FastAPI
 from redis import Redis
-from pymongo import MongoClient
 
 # Initialize services
 app = FastAPI()
 db = Database("mongodb://localhost:27017", "mydb")
 cache_db = CacheDatabase(Redis.from_url("redis://localhost"))
 ```
+
+> **Note**: Database operations are **asynchronous** (powered by Motor). Methods that
+> hit MongoDB — `insert`, `find_one`, `get`, `count`, `update`, `delete`, … — return
+> coroutines and must be `await`ed inside an `async` function. Cursors are async
+> iterators, so use `async for` (and `await cursor.all()` / `await cursor.first()`).
 
 ---
 
@@ -76,13 +80,12 @@ user_dict = apiserialize(user)
 
 **Purpose**: Type-safe MongoDB database operations with automatic model validation.
 
-**Description**: `Database` manages MongoDB connections and collections, while `Collection` provides CRUD operations with automatic serialization/deserialization of Pydantic models.
+**Description**: `Database` manages MongoDB connections and collections, while `Collection` provides async CRUD operations with automatic serialization/deserialization of Pydantic models. Document-touching methods are coroutines and must be awaited; `find()` and `aggregate()` return cursors synchronously (they only run when iterated/awaited).
 
 #### Example
 
 ```python
 from aasu import Database, APIModel
-from typing import Optional
 
 class Product(APIModel):
     id: str
@@ -96,33 +99,49 @@ db = Database("mongodb://localhost:27017", "store_db")
 # Get or create a collection with type hints
 products_col = db.collection("products", Product, primary_key="id")
 
-# Insert documents
-product1 = Product(id="P001", name="Laptop", price=999.99, stock=10)
-product2 = Product(id="P002", name="Mouse", price=29.99, stock=50)
-products_col.insert(product1, product2)
+async def main():
+    # Insert documents
+    product1 = Product(id="P001", name="Laptop", price=999.99, stock=10)
+    product2 = Product(id="P002", name="Mouse", price=29.99, stock=50)
+    await products_col.insert(product1, product2)
 
-# Also insert raw dictionaries
-products_col.insert({"id": "P003", "name": "Keyboard", "price": 79.99, "stock": 30})
+    # Also insert raw dictionaries
+    await products_col.insert({"id": "P003", "name": "Keyboard", "price": 79.99, "stock": 30})
 
-# Get single document by ID
-laptop = products_col.get("P001")
-# Returns: Product(id='P001', name='Laptop', price=999.99, stock=10)
+    # Insert or update by primary key
+    await products_col.insert_or_update({"id": "P001", "name": "Laptop Pro", "price": 1299.99, "stock": 5})
 
-# Find with filters
-expensive = products_col.find({"price": {"$gt": 100}})
-results = expensive.all()  # Get all results
+    # Get single document by ID
+    laptop = await products_col.get("P001")
+    # Returns: Product(id='P001', name='Laptop Pro', price=1299.99, stock=5)
 
-# Get first result
-first = products_col.find({"stock": {"$gt": 0}}).first()
+    # Find with filters (find() builds the cursor, .all() runs the query)
+    expensive = products_col.find({"price": {"$gt": 100}})
+    results = await expensive.all()  # Get all results
+
+    # Get first result
+    first = await products_col.find({"stock": {"$gt": 0}}).first()
+
+    # Count, update and delete
+    in_stock = await products_col.count({"stock": {"$gt": 0}})
+    await products_col.update({"price": {"$lt": 50}}, {"$inc": {"stock": 100}})
+    await products_col.delete("P002")  # by primary key, or pass a filter dict
 ```
 
 #### Collection Methods
 
+All methods below are coroutines (use `await`) **except** `find` and `aggregate`, which return a cursor synchronously.
+
 - `insert(*objs)`: Insert one or more documents (Pydantic models or dicts)
-- `find(filters, limit=None, projection=None)`: Find documents and return a Cursor
-- `find_one(filters)`: Get first document matching filters
+- `insert_or_update(obj)`: Insert, or update in place if the primary key already exists
+- `find(filters, *, limit=None, sort=None, skip=None, projection=None)`: Build a `Cursor` (not a coroutine)
+- `find_one(filters, projection=None)`: Get first document matching filters
 - `get(id)`: Get document by primary key
-- `aggregate(pipeline)`: Execute aggregation pipeline
+- `count(filters={})`: Count documents matching filters
+- `update(filters, update_data)`: Update every document matching filters
+- `update_one(filters, update_data, *, sort=None)`: Update a single matching document
+- `delete(filters)`: Delete documents matching a filter dict or a primary key value
+- `aggregate(pipeline, result_type=None)`: Build an `AggregateCursor` (not a coroutine)
 
 ---
 
@@ -145,39 +164,41 @@ class Order(APIModel):
 
 orders_col = db.collection("orders", Order, primary_key="id")
 
-# Basic find
-cursor = orders_col.find({"status": "pending"})
+async def main():
+    # Basic find
+    cursor = orders_col.find({"status": "pending"})
 
-# Chain operations
-results = (orders_col
-    .find({"customer_id": "CUST123"})
-    .filter({"status": "completed"})
-    .skip(10)
-    .limit(5)
-    .project({"id": 1, "total": 1})
-    .all()
-)
+    # Chain operations (the chained methods are sync; only .all()/.first() are awaited)
+    results = await (orders_col
+        .find({"customer_id": "CUST123"})
+        .filter({"status": "completed"})
+        .skip(10)
+        .limit(5)
+        .project({"id": 1, "total": 1})
+        .all()
+    )
 
-# Get just first result
-first_order = cursor.first()
+    # Get just first result
+    first_order = await cursor.first()
 
-# Iterate through results
-for order in cursor:
-    print(f"Order {order.id}: ${order.total}")
+    # Iterate through results (async)
+    async for order in cursor:
+        print(f"Order {order.id}: ${order.total}")
 
-# Get all results
-all_orders = cursor.all()
+    # Get all results
+    all_orders = await cursor.all()
 ```
 
 #### Cursor Methods
 
-- `filter(filters)`: Add additional filter conditions (chainable)
-- `limit(limit)`: Limit number of results (chainable)
-- `skip(skip)`: Skip N documents (chainable)
-- `project(projection)`: Select specific fields (chainable)
-- `first()`: Get first result or None
-- `all()`: Get all results as a list
-- `__iter__()`: Iterate through results
+- `filter(filters)`: Add additional filter conditions (chainable, sync)
+- `limit(limit)`: Limit number of results (chainable, sync)
+- `skip(skip)`: Skip N documents (chainable, sync)
+- `project(projection)`: Select specific fields (chainable, sync)
+- `sort(*pairs, **kwargs)`: Sort by `(field, direction)` pairs (chainable, sync)
+- `await first()`: Get first result or None
+- `await all()`: Get all results as a list
+- `__aiter__()`: Async-iterate through results (`async for ...`)
 
 ---
 
@@ -212,26 +233,29 @@ pipeline = [
     {"$sort": {"total_amount": -1}}
 ]
 
-# Execute aggregation
-cursor = sales_col.aggregate(pipeline)
+async def main():
+    # Execute aggregation
+    cursor = sales_col.aggregate(pipeline)
 
-# Add more pipeline stages
-cursor.add_line(
-    {"$limit": 10}
-)
+    # Add more pipeline stages
+    cursor.add_line(
+        {"$limit": 10}
+    )
 
-# Get results
-for result in cursor:
-    print(f"Product {result['_id']}: {result['total_quantity']} units, ${result['total_amount']}")
+    # Get results (async iteration)
+    async for result in cursor:
+        print(f"Product {result['_id']}: {result['total_quantity']} units, ${result['total_amount']}")
 
-# Or get all at once
-results = list(sales_col.aggregate(pipeline))
+    # Or get all at once
+    results = await sales_col.aggregate(pipeline).all()
 ```
 
 #### AggregateCursor Methods
 
-- `add_line(*pipeline)`: Add stages to the aggregation pipeline (chainable)
-- `__iter__()`: Iterate through aggregation results
+- `add_line(*pipeline)`: Add stages to the aggregation pipeline (chainable, sync)
+- `await first()`: Get first result or None
+- `await all()`: Get all results as a list
+- `__aiter__()`: Async-iterate through aggregation results (`async for ...`)
 
 ---
 
@@ -474,8 +498,8 @@ async def get_user(user_id: int):
     if cached:
         return cached
     
-    # Query database
-    user = users_col.get(user_id)
+    # Query database (async)
+    user = await users_col.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -526,7 +550,7 @@ except AAsuError as e:
 - Python >= 3.10
 - pydantic >= 2.13.4
 - fastapi >= 0.136.3
-- pymongo >= 4.17.0
+- motor >= 3.6.0
 - redis >= 7.4.0
 - pyjwt >= 2.13.0
 
