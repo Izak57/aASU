@@ -141,7 +141,7 @@ class Collection(Generic[ColModelT]):
         dict_objs = []
         for obj in objs:
             if isinstance(obj, BaseModel):
-                dict_objs.append(obj.model_dump(mode="json"))
+                dict_objs.append(obj.model_dump(mode="python"))
             else:
                 dict_objs.append(obj)
 
@@ -170,7 +170,7 @@ class Collection(Generic[ColModelT]):
         """Insert or update a object into the collection.
         The object is updated if the primary key value already exists."""
         if isinstance(obj, BaseModel):
-            dict_obj = obj.model_dump(mode="json")
+            dict_obj = obj.model_dump(mode="python")
         else:
             dict_obj = cast(dict[str, Any], obj)
 
