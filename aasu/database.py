@@ -6,10 +6,21 @@ from motor.motor_asyncio import (
     AsyncIOMotorCursor,
     AsyncIOMotorCommandCursor,
 )
+from pymongo import (
+    InsertOne as MongoInsertOne,
+    UpdateOne as MongoUpdateOne,
+    UpdateMany as MongoUpdateMany,
+    ReplaceOne as MongoReplaceOne,
+    DeleteOne as MongoDeleteOne,
+    DeleteMany as MongoDeleteMany,
+    ReturnDocument
+)
+from pymongo.results import BulkWriteResult
 
 
 __all__ = [
     "Database", "Collection", "Cursor", "AggregateCursor",
+    "BulkBubble",
     "ASC", "DESC"
 ]
 
@@ -37,6 +48,9 @@ class Database:
 
         elif uri:
             self.client = AsyncIOMotorClient(uri)
+
+        else:
+            raise ValueError("uri or mongo_client is required")
 
         """The motor database instance (used in internal)"""
         self._collections: dict[str, Collection[Any]] = {}
@@ -251,6 +265,33 @@ class Collection(Generic[ColModelT]):
         await self.collection.delete_many(ftrs)
 
 
+    def bulk(self) -> "BulkBubble":
+        """Returns a BulkBubble to queue and execute several write
+        operations in a single round-trip:
+
+            async with collection.bulk() as bubble:
+                bubble.insert_one(obj)
+                bubble.update_one(filters, {"$set": {...}})
+                bubble.delete_one(id)
+        """
+        return BulkBubble(self)
+
+
+    async def find_one_and_update(
+        self,
+        filters: dict[str, Any] | str,
+        update_data: dict[str, Any],
+        *,
+        upsert: bool = False,
+        return_after: bool = True,
+    ) -> ColModelT | None:
+        ftrs = filters if isinstance(filters, dict) else {self.primary_key: filters}
+        doc = await self.collection.find_one_and_update(
+            ftrs, update_data, upsert=upsert,
+            return_document=ReturnDocument.AFTER if return_after else ReturnDocument.BEFORE,
+        )
+        return self._deserialize_or_none(doc)
+
 
 class Cursor(Generic[ColModelT]):
 
@@ -281,7 +322,8 @@ class Cursor(Generic[ColModelT]):
             filters=self.filters.copy(),
             limit=self.record_limit,
             projection=(self.projection or {}).copy(),
-            skip_offset=self.skip_offset
+            skip_offset=self.skip_offset,
+            sort_data=self.sort_data.copy()
         )
 
 
@@ -400,3 +442,100 @@ class AggregateCursor(Generic[AggregateResultT]):
         if self.result_type and issubclass(self.result_type, BaseModel):
             return self.result_type.model_validate(obj)
         return obj # type: ignore
+
+
+class BulkBubble:
+
+    def __init__(self, collection: "Collection") -> None:
+        """Queues write operations to execute them all in a single
+        round-trip when the `async with` block exits.
+        Prefer using collection.bulk() instead."""
+        self.collection = collection
+        self.operations: list[Any] = []
+        self.result: BulkWriteResult | None = None
+
+
+    def __repr__(self) -> str:
+        return "<BulkBubble collection={!r} operations={}>".format(
+            self.collection.name, len(self.operations)
+        )
+
+
+    def _filters(self, filters: dict[str, Any] | str) -> dict[str, Any]:
+        return filters if isinstance(filters, dict) else {self.collection.primary_key: filters}
+
+
+    def _dump(self, obj: Any | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(obj, BaseModel):
+            return obj.model_dump(mode="python")
+        return obj
+
+
+    def insert_one(self, obj: Any | dict[str, Any]) -> Self:
+        """Queue an insert of a single object"""
+        self.operations.append(MongoInsertOne(self._dump(obj)))
+        return self
+
+
+    def insert_many(self, *objs: Any | dict[str, Any]) -> Self:
+        """Queue inserts of many objects"""
+        self.operations.extend(MongoInsertOne(self._dump(obj)) for obj in objs)
+        return self
+
+
+    def update_one(self,
+                    filters: dict[str, Any] | str,
+                    update_data: dict[str, Any]) -> Self:
+        """Queue an update of a single object matching the filters.
+        The filters can be a dict of filters or a primary key value"""
+        self.operations.append(MongoUpdateOne(self._filters(filters), update_data))
+        return self
+
+
+    def update_many(self,
+                     filters: dict[str, Any] | str,
+                     update_data: dict[str, Any]) -> Self:
+        """Queue an update of every object matching the filters"""
+        self.operations.append(MongoUpdateMany(self._filters(filters), update_data))
+        return self
+
+
+    def replace_one(self,
+                     filters: dict[str, Any] | str,
+                     obj: Any | dict[str, Any]) -> Self:
+        """Queue a full replace of a single object matching the filters"""
+        self.operations.append(MongoReplaceOne(self._filters(filters), self._dump(obj)))
+        return self
+
+
+    def delete_one(self, filters: dict[str, Any] | str) -> Self:
+        """Queue a delete of a single object matching the filters"""
+        self.operations.append(MongoDeleteOne(self._filters(filters)))
+        return self
+
+
+    def delete_many(self, filters: dict[str, Any] | str) -> Self:
+        """Queue a delete of every object matching the filters"""
+        self.operations.append(MongoDeleteMany(self._filters(filters)))
+        return self
+
+
+    async def execute(self) -> BulkWriteResult | None:
+        """Executes all queued operations in a single bulk_write call.
+        Called automatically when leaving the `async with` block."""
+        if not self.operations:
+            return None
+
+        self.result = await self.collection.collection.bulk_write(self.operations)
+        return self.result
+
+
+    async def __aenter__(self) -> Self:
+        return self
+
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        # Don't execute if an exception was raised inside the block,
+        # so a partially-built bulk doesn't get sent by accident.
+        if exc_type is None:
+            await self.execute()
